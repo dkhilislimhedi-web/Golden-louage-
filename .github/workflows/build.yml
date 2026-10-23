@@ -1,0 +1,37 @@
+
+name: Build Golden Louage APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Flutter project
+        run: |
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /tmp/flutter
+          /tmp/flutter/bin/flutter create --project-name golden_louage --org com.goldenlouage /tmp/golden_app
+          cp -r /tmp/golden_app/. .
+          mkdir -p lib
+          cp lib/main.dart /tmp/main.dart
+          cp /tmp/main.dart lib/main.dart
+
+      - name: Build APK
+        run: |
+          /tmp/flutter/bin/flutter pub get
+          /tmp/flutter/bin/flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-louage-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          
