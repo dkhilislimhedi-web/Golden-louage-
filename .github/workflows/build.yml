@@ -1,4 +1,5 @@
 
+     
 name: Build Golden Louage APK
 
 on:
@@ -15,23 +16,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Create Flutter project
-        run: |
-          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git /tmp/flutter
-          /tmp/flutter/bin/flutter create --project-name golden_louage --org com.goldenlouage /tmp/golden_app
-          cp -r /tmp/golden_app/. .
-          mkdir -p lib
-          cp lib/main.dart /tmp/main.dart
-          cp /tmp/main.dart lib/main.dart
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
 
+      - name: Create Flutter project structure
+        run: |
+          flutter create --project-name golden_louage --org com.goldenlouage .
+          
       - name: Build APK
         run: |
-          /tmp/flutter/bin/flutter pub get
-          /tmp/flutter/bin/flutter build apk --release
+          flutter pub get
+          flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: golden-louage-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-          
+     
