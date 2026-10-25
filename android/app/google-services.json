@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "500392213998",
+    "project_id": "golden-louage-9efcb",
+    "storage_bucket": "golden-louage-9efcb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:500392213998:android:c49e5f23c879a92ef922ff",
+        "android_client_info": {
+          "package_name": "com.goldenlouage.golden_louage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbUY5BTse4gGhM75frfBav16pjXgBCJ8o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
