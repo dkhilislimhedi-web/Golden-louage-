@@ -1,5 +1,4 @@
 
-
 name: Build Golden Louage APK
 
 on:
@@ -73,6 +72,11 @@ jobs:
           pubspec.write_text(text)
           PY
 
+      - name: Generate SHA-1 report
+        run: |
+          cd android
+          gradle signingReport
+
       - name: Build APK
         run: |
           flutter pub get
@@ -83,5 +87,3 @@ jobs:
         with:
           name: golden-louage-apk
           path: build/app/outputs/flutter-apk/app-release.apk
-
-     
