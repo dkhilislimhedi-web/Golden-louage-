@@ -1,4 +1,3 @@
-
 name: Build Golden Louage APK
 
 on:
@@ -24,7 +23,7 @@ jobs:
         run: |
           flutter create --project-name golden_louage --org com.goldenlouage .
 
-      - name: Configure Firebase Gradle plugin
+      - name: Configure Android signing and Firebase
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -33,7 +32,7 @@ jobs:
           text = settings.read_text()
           plugin = 'id("com.google.gms.google-services") version "4.4.4" apply false'
 
-          if 'com.google.gms.google-services' not in text:
+          if "com.google.gms.google-services" not in text:
               text = text.replace(
                   "plugins {",
                   "plugins {\n    " + plugin,
@@ -52,12 +51,6 @@ jobs:
                   1
               )
           app_gradle.write_text(text)
-          PY
-
-      - name: Add Firebase dependencies
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
 
           pubspec = Path("pubspec.yaml")
           text = pubspec.read_text()
@@ -65,23 +58,65 @@ jobs:
           if "firebase_core:" not in text:
               text = text.replace(
                   "dependencies:",
-                  "dependencies:\n  firebase_core: ^4.2.1\n  firebase_auth: ^6.1.1\n  cloud_firestore: ^6.1.0",
+                  "dependencies:\n"
+                  "  firebase_core: ^4.2.1\n"
+                  "  firebase_auth: ^6.1.1\n"
+                  "  cloud_firestore: ^6.1.0",
                   1
               )
-
           pubspec.write_text(text)
           PY
 
-      - name: Generate SHA-1 report
+      - name: Prepare Android debug signing key
         run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew signingReport
+          mkdir -p "$HOME/.config/.android"
+
+          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.config/.android/debug.keystore" \
+              -storepass android \
+              -alias AndroidDebugKey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          keytool -list -v \
+            -keystore "$HOME/.config/.android/debug.keystore" \
+            -storepass android \
+            -alias AndroidDebugKey
 
       - name: Build APK
         run: |
           flutter pub get
           flutter build apk --release
+
+      - name: Print APK signing certificate SHA-1
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -type f -name apksigner | sort -V | tail -n 1)
+
+          echo "========== APK CERTIFICATE =========="
+          "$APKSIGNER" verify --print-certs "$APK" | tee apk-certificate.txt
+
+          SHA1=$(sed -n 's/.*certificate SHA-1 digest: //p' apk-certificate.txt | head -n 1)
+
+          if [ -z "$SHA1" ]; then
+            echo "ERROR: Could not extract APK SHA-1"
+            exit 1
+          fi
+
+          echo "========== COPY THIS SHA-1 TO FIREBASE =========="
+          echo "$SHA1"
+
+          {
+            echo "## Golden Louage APK SHA-1"
+            echo ""
+            echo "\`$SHA1\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
