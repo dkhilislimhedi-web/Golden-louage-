@@ -75,7 +75,8 @@ jobs:
       - name: Generate SHA-1 report
         run: |
           cd android
-          gradle signingReport
+          chmod +x gradlew
+          ./gradlew signingReport
 
       - name: Build APK
         run: |
