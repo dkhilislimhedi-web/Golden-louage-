@@ -1427,7 +1427,110 @@ class DriverBookingHistoryPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class DriverProfilePage extends StatelessWidget {
+  const DriverProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ملفي كسائق'),
+      ),
+      body: StreamBuilder<
+          DocumentSnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('drivers')
+            .doc(user.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل معلومات الحساب'),
+            );
+          }
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          if (!snapshot.hasData ||
+              !snapshot.data!.exists) {
+            return const Center(
+              child: Text('لم يتم العثور على ملف السائق'),
+            );
+          }
+
+          final driver = snapshot.data!.data()!;
+          final approved = driver['status'] == 'approved';
+          final active = driver['active'] == true;
+
+          String statusText;
+
+          if (!approved) {
+            statusText = 'الحساب في انتظار الاعتماد';
+          } else if (active) {
+            statusText = 'الحساب معتمد ونشط';
+          } else {
+            statusText = 'الحساب معتمد لكنه غير نشط';
+          }
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const CircleAvatar(
+                radius: 38,
+                child: Icon(
+                  Icons.person,
+                  size: 42,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.email),
+                  title: const Text('البريد الإلكتروني'),
+                  subtitle: Text(user.email ?? 'غير متوفر'),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.verified_user),
+                  title: const Text('حالة الحساب'),
+                  subtitle: Text(statusText),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: Icon(
+                    active ? Icons.check_circle : Icons.info,
+                    color: active ? Colors.green : Colors.orange,
+                  ),
+                  title: const Text('النشاط'),
+                  subtitle: Text(
+                    active ? 'نشط' : 'غير نشط',
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 
 
