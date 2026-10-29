@@ -846,4 +846,141 @@ class AdminPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class DriverStopRequestsPage extends StatelessWidget {
+  const DriverStopRequestsPage({super.key});
+
+  Future<void> handleRequest(
+    BuildContext context,
+    String uid,
+    bool approve,
+  ) async {
+    try {
+      final requestRef =
+          db.collection('driver_stop_requests').doc(uid);
+      final driverRef = db.collection('drivers').doc(uid);
+
+      await db.runTransaction((transaction) async {
+        final requestSnapshot =
+            await transaction.get(requestRef);
+
+        if (!requestSnapshot.exists) {
+          throw Exception('طلب التوقف غير موجود');
+        }
+
+        final requestData = requestSnapshot.data()
+            as Map<String, dynamic>;
+
+        if (requestData['status'] != 'pending') {
+          throw Exception('تمت معالجة هذا الطلب سابقًا');
+        }
+
+        if (approve) {
+          transaction.update(driverRef, {
+            'active': false,
+            'status': 'approved',
+          });
+        }
+
+        transaction.update(requestRef, {
+          'status': approve ? 'approved' : 'rejected',
+          'processedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (context.mounted) {
+        message(
+          context,
+          approve
+              ? 'تم إيقاف نشاط السائق'
+              : 'تم رفض طلب التوقف',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّرت معالجة الطلب: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('طلبات توقف السائقين'),
+      ),
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('driver_stop_requests')
+            .where('status', isEqualTo: 'pending')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل الطلبات'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final requests = snapshot.data!.docs;
+
+          if (requests.isEmpty) {
+            return const Center(
+              child: Text('لا توجد طلبات توقّف معلّقة'),
+            );
+          }
+
+          return ListView.builder(
+            itemCount: requests.length,
+            itemBuilder: (context, index) {
+              final request = requests[index];
+              final data = request.data();
+
+              return Card(
+                margin: const EdgeInsets.all(10),
+                child: ListTile(
+                  title: Text(
+                    'السائق: ${data['uid'] ?? request.id}',
+                  ),
+                  subtitle: const Text(
+                    'طلب إيقاف النشاط في انتظار المراجعة',
+                  ),
+                  isThreeLine: true,
+                  trailing: PopupMenuButton<bool>(
+                    tooltip: 'معالجة الطلب',
+                    onSelected: (approve) {
+                      handleRequest(
+                        context,
+                        request.id,
+                        approve,
+                      );
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem<bool>(
+                        value: true,
+                        child: Text('الموافقة على التوقف'),
+                      ),
+                      PopupMenuItem<bool>(
+                        value: false,
+                        child: Text('رفض الطلب'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
