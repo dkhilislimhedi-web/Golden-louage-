@@ -704,6 +704,7 @@ class DriverPage extends StatelessWidget {
   }
 }
 
+
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
 
@@ -713,17 +714,22 @@ class AdminPage extends StatelessWidget {
   ) async {
     try {
       final batch = db.batch();
+
       batch.update(db.collection('drivers').doc(uid), {
         'status': 'approved',
         'active': true,
       });
+
       batch.update(
         db.collection('driver_applications').doc(uid),
         {'status': 'approved'},
       );
+
       await batch.commit();
 
-      if (context.mounted) message(context, 'تم اعتماد السائق');
+      if (context.mounted) {
+        message(context, 'تم اعتماد السائق');
+      }
     } catch (e) {
       if (context.mounted) {
         message(context, 'تعذّر اعتماد السائق: $e');
@@ -740,9 +746,14 @@ class AdminPage extends StatelessWidget {
         'status': 'suspended',
         'active': false,
       });
-      if (context.mounted) message(context, 'تم إيقاف حساب السائق');
+
+      if (context.mounted) {
+        message(context, 'تم إيقاف حساب السائق');
+      }
     } catch (e) {
-      if (context.mounted) message(context, 'حدث خطأ: $e');
+      if (context.mounted) {
+        message(context, 'حدث خطأ: $e');
+      }
     }
   }
 
@@ -755,31 +766,75 @@ class AdminPage extends StatelessWidget {
           IconButton(
             onPressed: () => auth.signOut(),
             icon: const Icon(Icons.logout),
+            tooltip: 'تسجيل الخروج',
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.event_seat),
+              title: const Text('إدارة الحجوزات'),
+              subtitle: const Text('إسناد الحجوزات إلى السائقين'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const BookingManagementPage(),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.car_crash),
+              title: const Text('طلبات إيقاف السائقين'),
+              subtitle: const Text('مراجعة الطلبات واتخاذ القرار'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const DriverStopRequestsPage(),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const Divider(height: 32),
+
           const Text(
             'طلبات اعتماد السائقين',
-            style: TextStyle(fontSize: 20,
-                fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          StreamBuilder<
-              QuerySnapshot<Map<String, dynamic>>>(
-            stream: db.collection('driver_applications')
+
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: db
+                .collection('driver_applications')
                 .where('status', isEqualTo: 'pending')
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text('تعذّر تحميل طلبات السائقين');
+                return const Text(
+                  'تعذّر تحميل طلبات السائقين',
+                );
               }
+
               if (!snapshot.hasData) {
                 return const LinearProgressIndicator();
               }
 
               final docs = snapshot.data!.docs;
+
               if (docs.isEmpty) {
                 return const Padding(
                   padding: EdgeInsets.all(12),
@@ -790,13 +845,17 @@ class AdminPage extends StatelessWidget {
               return Column(
                 children: docs.map((doc) {
                   final d = doc.data();
+
                   return Card(
                     child: ListTile(
                       title: Text('${d['name'] ?? ''}'),
                       subtitle: Text('${d['phone'] ?? ''}'),
                       trailing: IconButton(
-                        icon: const Icon(Icons.check_circle,
-                            color: Colors.green),
+                        icon: const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                        ),
+                        tooltip: 'اعتماد السائق',
                         onPressed: () =>
                             approveDriver(context, doc.id),
                       ),
@@ -806,25 +865,46 @@ class AdminPage extends StatelessWidget {
               );
             },
           ),
+
           const Divider(height: 32),
+
           const Text(
             'السائقون المعتمدون',
-            style: TextStyle(fontSize: 20,
-                fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          StreamBuilder<
-              QuerySnapshot<Map<String, dynamic>>>(
-            stream: db.collection('drivers')
+
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: db
+                .collection('drivers')
                 .where('status', isEqualTo: 'approved')
                 .snapshots(),
             builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text(
+                  'تعذّر تحميل قائمة السائقين',
+                );
+              }
+
               if (!snapshot.hasData) {
                 return const LinearProgressIndicator();
               }
 
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text('لا يوجد سائقون معتمدون'),
+                );
+              }
+
               return Column(
-                children: snapshot.data!.docs.map((doc) {
+                children: docs.map((doc) {
                   final d = doc.data();
+
                   return Card(
                     child: ListTile(
                       title: Text('${d['name'] ?? doc.id}'),
@@ -833,6 +913,7 @@ class AdminPage extends StatelessWidget {
                       ),
                       trailing: IconButton(
                         icon: const Icon(Icons.pause_circle),
+                        tooltip: 'إيقاف السائق',
                         onPressed: () =>
                             suspendDriver(context, doc.id),
                       ),
@@ -846,8 +927,8 @@ class AdminPage extends StatelessWidget {
       ),
     );
   }
-
 }
+
 
 class DriverStopRequestsPage extends StatelessWidget {
   const DriverStopRequestsPage({super.key});
