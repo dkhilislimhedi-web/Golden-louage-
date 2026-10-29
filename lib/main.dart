@@ -1902,7 +1902,81 @@ class DriverSettingsPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class HelpAndSupportPage extends StatelessWidget {
+  const HelpAndSupportPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('المساعدة والاتصال'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Icon(
+            Icons.support_agent,
+            size: 64,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'مرحبًا بك في Golden louage',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.confirmation_number),
+              title: Text('مساعدة في الحجز'),
+              subtitle: Text(
+                'تحقق من نقطة الانطلاق والوجهة والتاريخ '
+                'والوقت والمقعد قبل تأكيد الحجز.',
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.directions_car),
+              title: Text('مساعدة السائق'),
+              subtitle: Text(
+                'يجب اعتماد حساب السائق من الإدارة قبل '
+                'استعمال وظائف السائق.',
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.security),
+              title: Text('أمان الحساب'),
+              subtitle: Text(
+                'لا تشارك كلمة المرور أو بيانات الدخول '
+                'مع أي شخص.',
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.contact_support),
+              title: Text('الاتصال بالدعم'),
+              subtitle: Text(
+                'سيتم ربط وسائل الاتصال بالدعم في مرحلة '
+                'استكمال التطبيق.',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 
