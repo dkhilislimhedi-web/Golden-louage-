@@ -1770,7 +1770,140 @@ class PassengerSettingsPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class DriverSettingsPage extends StatelessWidget {
+  const DriverSettingsPage({super.key});
+
+  Future<void> signOut(BuildContext context) async {
+    try {
+      await auth.signOut();
+
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const LoginPage(),
+          ),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّر تسجيل الخروج: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إعدادات السائق'),
+      ),
+      body: StreamBuilder<
+          DocumentSnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('drivers')
+            .doc(user.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل الإعدادات'),
+            );
+          }
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          if (!snapshot.hasData ||
+              !snapshot.data!.exists) {
+            return const Center(
+              child: Text('ملف السائق غير موجود'),
+            );
+          }
+
+          final driver = snapshot.data!.data()!;
+          final approved = driver['status'] == 'approved';
+          final active = driver['active'] == true;
+
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ListTile(
+                leading: const Icon(Icons.verified_user),
+                title: const Text('حالة الاعتماد'),
+                subtitle: Text(
+                  approved ? 'معتمد' : 'في انتظار الاعتماد',
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(
+                  active ? Icons.check_circle : Icons.pause_circle,
+                ),
+                title: const Text('حالة النشاط'),
+                subtitle: Text(
+                  active ? 'نشط' : 'غير نشط',
+                ),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.email),
+                title: const Text('البريد الإلكتروني'),
+                subtitle: Text(user.email ?? 'غير متوفر'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('تسجيل الخروج'),
+                onTap: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('تسجيل الخروج'),
+                      content: const Text(
+                        'هل تريد تسجيل الخروج من حسابك؟',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.pop(dialogContext, false),
+                          child: const Text('إلغاء'),
+                        ),
+                        FilledButton(
+                          onPressed: () =>
+                              Navigator.pop(dialogContext, true),
+                          child: const Text('خروج'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true && context.mounted) {
+                    await signOut(context);
+                  }
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 
 
