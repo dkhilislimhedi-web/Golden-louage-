@@ -1176,5 +1176,169 @@ class BookingManagementPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class DriverBookingResponsesPage extends StatelessWidget {
+  const DriverBookingResponsesPage({super.key});
+
+  Future<void> respond(
+    BuildContext context,
+    String bookingId,
+    bool accept,
+  ) async {
+    final user = auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final bookingRef =
+          db.collection('booking_requests').doc(bookingId);
+
+      await db.runTransaction((transaction) async {
+        final snapshot = await transaction.get(bookingRef);
+
+        if (!snapshot.exists) {
+          throw Exception('الحجز غير موجود');
+        }
+
+        final booking =
+            snapshot.data() as Map<String, dynamic>;
+
+        if (booking['driverUid'] != user.uid) {
+          throw Exception('هذا الحجز غير مسند إليك');
+        }
+
+        if (booking['status'] != 'confirmed') {
+          throw Exception('الحجز ليس في حالة تسمح بالرد');
+        }
+
+        transaction.update(bookingRef, {
+          'status': accept ? 'accepted' : 'rejected',
+          'driverRespondedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (context.mounted) {
+        message(
+          context,
+          accept ? 'تم قبول الحجز' : 'تم رفض الحجز',
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّر الرد على الحجز: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الرد على الحجوزات'),
+      ),
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('booking_requests')
+            .where('driverUid', isEqualTo: user.uid)
+            .where('status', isEqualTo: 'confirmed')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل الحجوزات'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final bookings = snapshot.data!.docs;
+
+          if (bookings.isEmpty) {
+            return const Center(
+              child: Text('لا توجد حجوزات تنتظر ردّك'),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: bookings.length,
+            itemBuilder: (context, index) {
+              final doc = bookings[index];
+              final booking = doc.data();
+
+              return Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${booking['departure'] ?? ''} ← '
+                        '${booking['destination'] ?? ''}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'التاريخ: ${booking['travelDate'] ?? ''}',
+                      ),
+                      Text(
+                        'الوقت: ${booking['travelTime'] ?? ''}',
+                      ),
+                      Text(
+                        'المقعد: ${booking['seat'] ?? ''}',
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: () => respond(
+                                context,
+                                doc.id,
+                                true,
+                              ),
+                              child: const Text('قبول'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => respond(
+                                context,
+                                doc.id,
+                                false,
+                              ),
+                              child: const Text('رفض'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 
