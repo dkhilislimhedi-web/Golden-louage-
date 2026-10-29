@@ -974,7 +974,203 @@ class DriverStopRequestsPage extends StatelessWidget {
                       ),
                     ],
                   ),
-                ),
+                )
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+}
+
+class BookingManagementPage extends StatelessWidget {
+  const BookingManagementPage({super.key});
+
+  Future<void> assignDriver(
+    BuildContext context,
+    String bookingId,
+    String driverUid,
+  ) async {
+    try {
+      final bookingRef =
+          db.collection('booking_requests').doc(bookingId);
+      final driverRef = db.collection('drivers').doc(driverUid);
+
+      await db.runTransaction((transaction) async {
+        final bookingSnapshot =
+            await transaction.get(bookingRef);
+        final driverSnapshot =
+            await transaction.get(driverRef);
+
+        if (!bookingSnapshot.exists) {
+          throw Exception('الحجز غير موجود');
+        }
+
+        if (!driverSnapshot.exists) {
+          throw Exception('السائق غير موجود');
+        }
+
+        final driver = driverSnapshot.data()
+            as Map<String, dynamic>;
+        final booking = bookingSnapshot.data()
+            as Map<String, dynamic>;
+
+        if (driver['status'] != 'approved' ||
+            driver['active'] != true) {
+          throw Exception('السائق غير معتمد أو غير نشط');
+        }
+
+        if (booking['driverUid'] != null &&
+            booking['driverUid'] != '') {
+          throw Exception('الحجز مسند إلى سائق بالفعل');
+        }
+
+        transaction.update(bookingRef, {
+          'driverUid': driverUid,
+          'assignedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (context.mounted) {
+        message(context, 'تم إسناد الحجز إلى السائق');
+      }
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّر إسناد الحجز: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة الحجوزات'),
+      ),
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('booking_requests')
+            .snapshots(),
+        builder: (context, bookingSnapshot) {
+          if (bookingSnapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل الحجوزات'),
+            );
+          }
+
+          if (!bookingSnapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final bookings = bookingSnapshot.data!.docs;
+
+          if (bookings.isEmpty) {
+            return const Center(
+              child: Text('لا توجد حجوزات'),
+            );
+          }
+
+          return StreamBuilder<
+              QuerySnapshot<Map<String, dynamic>>>(
+            stream: db
+                .collection('drivers')
+                .where('status', isEqualTo: 'approved')
+                .where('active', isEqualTo: true)
+                .snapshots(),
+            builder: (context, driverSnapshot) {
+              if (!driverSnapshot.hasData) {
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
+              }
+
+              final drivers = driverSnapshot.data!.docs;
+
+              return ListView.builder(
+                itemCount: bookings.length,
+                itemBuilder: (context, index) {
+                  final bookingDoc = bookings[index];
+                  final booking = bookingDoc.data();
+                  final assigned =
+                      (booking['driverUid'] ?? '')
+                          .toString()
+                          .isNotEmpty;
+
+                  return Card(
+                    margin: const EdgeInsets.all(10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${booking['departure'] ?? ''} ← '
+                            '${booking['destination'] ?? ''}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'التاريخ: ${booking['travelDate'] ?? ''}',
+                          ),
+                          Text(
+                            'الوقت: ${booking['travelTime'] ?? ''}',
+                          ),
+                          Text(
+                            'المقعد: ${booking['seat'] ?? ''}',
+                          ),
+                          Text(
+                            'الحالة: ${booking['status'] ?? ''}',
+                          ),
+                          const SizedBox(height: 10),
+                          if (assigned)
+                            Text(
+                              'السائق المعيّن: '
+                              '${booking['driverUid']}',
+                            )
+                          else if (drivers.isEmpty)
+                            const Text(
+                              'لا يوجد سائق نشط ومعتمد حاليًا',
+                            )
+                          else
+                            DropdownButtonFormField<String>(
+                              decoration: const InputDecoration(
+                                labelText: 'إسناد إلى سائق',
+                              ),
+                              items: drivers.map((driverDoc) {
+                                final driver =
+                                    driverDoc.data();
+                                return DropdownMenuItem<String>(
+                                  value: driverDoc.id,
+                                  child: Text(
+                                    '${driver['name'] ?? driverDoc.id}',
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (driverUid) {
+                                if (driverUid != null) {
+                                  assignDriver(
+                                    context,
+                                    bookingDoc.id,
+                                    driverUid,
+                                  );
+                                }
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               );
             },
           );
