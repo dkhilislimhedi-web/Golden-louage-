@@ -1624,7 +1624,71 @@ class UserNotificationsPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class PassengerProfilePage extends StatelessWidget {
+  const PassengerProfilePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ملفي الشخصي'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const SizedBox(height: 20),
+          const CircleAvatar(
+            radius: 42,
+            child: Icon(
+              Icons.person,
+              size: 48,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.email),
+              title: const Text('البريد الإلكتروني'),
+              subtitle: Text(
+                user.email ?? 'غير متوفر',
+              ),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.badge),
+              title: const Text('معرّف الحساب'),
+              subtitle: SelectableText(user.uid),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.calendar_today),
+              title: const Text('تاريخ إنشاء الحساب'),
+              subtitle: Text(
+                user.metadata.creationTime == null
+                    ? 'غير متوفر'
+                    : '${user.metadata.creationTime!.day}/'
+                      '${user.metadata.creationTime!.month}/'
+                      '${user.metadata.creationTime!.year}',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 
