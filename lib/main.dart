@@ -10,8 +10,8 @@ Future<void> main() async {
   runApp(const GoldenLouageApp());
 }
 
-final db = FirebaseFirestore.instance;
 final auth = FirebaseAuth.instance;
+final db = FirebaseFirestore.instance;
 
 class GoldenLouageApp extends StatelessWidget {
   const GoldenLouageApp({super.key});
@@ -19,11 +19,11 @@ class GoldenLouageApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Golden louage',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.amber),
         useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.amber),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
         ),
@@ -31,36 +31,6 @@ class GoldenLouageApp extends StatelessWidget {
       home: const AuthGate(),
     );
   }
-}
-
-void message(BuildContext context, String text) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(text)),
-  );
-}
-
-String errorText(Object e) {
-  if (e is FirebaseAuthException) {
-    switch (e.code) {
-      case 'weak-password':
-        return 'كلمة السر يجب أن تكون 6 أحرف على الأقل.';
-      case 'email-already-in-use':
-        return 'هذا الإيميل مسجّل من قبل.';
-      case 'invalid-email':
-        return 'الإيميل غير صحيح.';
-      case 'invalid-credential':
-        return 'الإيميل أو كلمة السر غير صحيحة.';
-      case 'user-disabled':
-        return 'هذا الحساب معطّل.';
-    }
-  }
-  if (e is FirebaseException) {
-    if (e.code == 'permission-denied') {
-      return 'العملية مرفوضة بسبب قواعد الأمان. سنراجع قواعد Firestore.';
-    }
-    return 'خطأ في Firebase: ${e.message ?? e.code}';
-  }
-  return 'حدث خطأ. تحقق من اتصال الإنترنت وحاول مجددًا.';
 }
 
 class AuthGate extends StatelessWidget {
@@ -75,7 +45,37 @@ class AuthGate extends StatelessWidget {
           return const LoadingPage();
         }
         if (snapshot.data == null) return const LoginPage();
-        return const AccountGate();
+
+        final user = snapshot.data!;
+        return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          future: db.collection('admins').doc(user.uid).get(),
+          builder: (context, adminSnap) {
+            if (!adminSnap.hasData) return const LoadingPage();
+            if (adminSnap.data!.exists) return const AdminPage();
+
+            return FutureBuilder<
+                DocumentSnapshot<Map<String, dynamic>>>(
+              future: db.collection('drivers').doc(user.uid).get(),
+              builder: (context, driverSnap) {
+                if (!driverSnap.hasData) {
+                  return const LoadingPage();
+                }
+
+                if (driverSnap.data!.exists) {
+                  final d = driverSnap.data!.data() ?? {};
+                  if (d['status'] == 'approved' &&
+                      d['active'] == true) {
+                    return const DriverPage();
+                  }
+                  return DriverStatusPage(
+                    status: '${d['status'] ?? 'pending'}',
+                  );
+                }
+                return const PassengerPage();
+              },
+            );
+          },
+        );
       },
     );
   }
@@ -90,6 +90,12 @@ class LoadingPage extends StatelessWidget {
       );
 }
 
+void message(BuildContext context, String text) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(text)),
+  );
+}
+
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -100,24 +106,18 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final email = TextEditingController();
   final password = TextEditingController();
-  bool registering = false;
+  bool register = false;
   bool busy = false;
 
-  @override
-  void dispose() {
-    email.dispose();
-    password.dispose();
-    super.dispose();
-  }
-
   Future<void> submit() async {
-    if (email.text.trim().isEmpty || password.text.isEmpty) {
-      message(context, 'أدخل الإيميل وكلمة السر.');
+    if (email.text.trim().isEmpty || password.text.length < 6) {
+      message(context, 'أدخل البريد وكلمة مرور من 6 أحرف على الأقل');
       return;
     }
+
     setState(() => busy = true);
     try {
-      if (registering) {
+      if (register) {
         await auth.createUserWithEmailAndPassword(
           email: email.text.trim(),
           password: password.text,
@@ -128,67 +128,74 @@ class _LoginPageState extends State<LoginPage> {
           password: password.text,
         );
       }
+    } on FirebaseAuthException catch (e) {
+      if (mounted) message(context, e.message ?? 'تعذّر تسجيل الدخول');
     } catch (e) {
-      if (mounted) message(context, errorText(e));
+      if (mounted) message(context, 'حدث خطأ: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
   @override
+  void dispose() {
+    email.dispose();
+    password.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Golden louage')),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.directions_bus, size: 76),
-              const SizedBox(height: 16),
+              const Icon(Icons.directions_bus,
+                  size: 76, color: Colors.amber),
+              const SizedBox(height: 12),
               const Text(
-                'مرحبًا بك في Golden louage',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                'Golden louage',
+                style: TextStyle(fontSize: 28,
+                    fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 24),
+              const Text('رحلتك تبدأ معنا'),
+              const SizedBox(height: 28),
               TextField(
                 controller: email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'الإيميل'),
+                decoration: const InputDecoration(
+                  labelText: 'البريد الإلكتروني',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: password,
                 obscureText: true,
-                decoration: const InputDecoration(labelText: 'كلمة السر'),
+                decoration: const InputDecoration(
+                  labelText: 'كلمة المرور',
+                ),
               ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed: busy ? null : submit,
-                child: Text(
-                  busy
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: busy ? null : submit,
+                  child: Text(busy
                       ? 'يرجى الانتظار...'
-                      : registering
+                      : register
                           ? 'إنشاء حساب'
-                          : 'تسجيل الدخول',
+                          : 'دخول'),
                 ),
               ),
               TextButton(
                 onPressed: busy
                     ? null
-                    : () => setState(() => registering = !registering),
-                child: Text(
-                  registering
-                      ? 'لدي حساب بالفعل'
-                      : 'إنشاء حساب جديد',
-                ),
-              ),
-              const Text(
-                'تسجيل الدخول الحالي بالإيميل. يجب إعداد التحقق من الهاتف '
-                'قبل السماح بالحجوزات المتعددة.',
-                textAlign: TextAlign.center,
+                    : () => setState(() => register = !register),
+                child: Text(register
+                    ? 'لديك حساب؟ سجّل الدخول'
+                    : 'ليس لديك حساب؟ أنشئ حسابًا'),
               ),
             ],
           ),
@@ -198,58 +205,16 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-class AccountGate extends StatelessWidget {
-  const AccountGate({super.key});
+class PassengerPage extends StatelessWidget {
+  const PassengerPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final user = auth.currentUser!;
-    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: db.collection('drivers').doc(user.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const HomePage();
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const LoadingPage();
-        }
-
-        final driver = snapshot.data?.data();
-        if (driver == null) return const HomePage();
-
-        final status = driver['status'] ?? 'pending';
-        final active = driver['active'] == true;
-
-        if (status == 'approved' && active) {
-          return const DriverPage();
-        }
-        if (status == 'suspended' || status == 'stopped') {
-          return DriverStatusPage(
-            title: 'حساب السائق موقوف',
-            details: 'لا يمكنك استقبال حجوزات جديدة. تواصل مع إدارة التطبيق.',
-          );
-        }
-        return DriverStatusPage(
-          title: 'طلب اعتماد السائق قيد المراجعة',
-          details: 'لن تتمكن من استقبال الحجوزات حتى توافق إدارة التطبيق.',
-        );
-      },
-    );
-  }
-}
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final user = auth.currentUser!;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Golden louage'),
         actions: [
           IconButton(
-            tooltip: 'تسجيل الخروج',
             onPressed: () => auth.signOut(),
             icon: const Icon(Icons.logout),
           ),
@@ -258,207 +223,45 @@ class HomePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          const Icon(Icons.directions_bus, size: 70),
-          const SizedBox(height: 12),
           const Text(
-            'مرحبًا بك في Golden louage',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+            'مرحبًا بك',
+            style: TextStyle(fontSize: 25,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Text(user.email ?? user.phoneNumber ?? ''),
+          const Text('احجز مقعدك وتابع حالة رحلتك.'),
           const SizedBox(height: 24),
           FilledButton.icon(
-            icon: const Icon(Icons.event_seat),
-            label: const Text('احجز مقعدًا'),
             onPressed: () => Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const BookingPage()),
-            ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.confirmation_number),
-            label: const Text('رحلاتي وحجوزاتي'),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const MyBookingsPage()),
-            ),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.drive_eta),
-            label: const Text('طلب اعتماد كسائق'),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DriverApplicationPage()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class DriverStatusPage extends StatelessWidget {
-  final String title;
-  final String details;
-
-  const DriverStatusPage({
-    super.key,
-    required this.title,
-    required this.details,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('حالة حساب السائق'),
-        actions: [
-          IconButton(
-            onPressed: () => auth.signOut(),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.hourglass_top, size: 64),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+              MaterialPageRoute(
+                builder: (_) => const BookingPage(),
               ),
-              const SizedBox(height: 12),
-              Text(details, textAlign: TextAlign.center),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class DriverApplicationPage extends StatefulWidget {
-  const DriverApplicationPage({super.key});
-
-  @override
-  State<DriverApplicationPage> createState() =>
-      _DriverApplicationPageState();
-}
-
-class _DriverApplicationPageState extends State<DriverApplicationPage> {
-  final name = TextEditingController();
-  final phone = TextEditingController();
-  final vehicle = TextEditingController();
-  final plate = TextEditingController();
-  final departure = TextEditingController();
-  final destination = TextEditingController();
-  bool busy = false;
-
-  @override
-  void dispose() {
-    name.dispose();
-    phone.dispose();
-    vehicle.dispose();
-    plate.dispose();
-    departure.dispose();
-    destination.dispose();
-    super.dispose();
-  }
-
-  Future<void> submit() async {
-    final user = auth.currentUser;
-    if (user == null) return;
-
-    if ([name, phone, vehicle, plate, departure, destination]
-        .any((c) => c.text.trim().isEmpty)) {
-      message(context, 'يرجى إكمال جميع المعلومات.');
-      return;
-    }
-
-    setState(() => busy = true);
-    try {
-      final existing =
-          await db.collection('drivers').doc(user.uid).get();
-      if (existing.exists) {
-        message(context, 'لديك بالفعل ملف سائق أو طلب اعتماد.');
-        return;
-      }
-
-      await db.collection('driver_applications').add({
-        'uid': user.uid,
-        'name': name.text.trim(),
-        'phone': phone.text.trim(),
-        'vehicle': vehicle.text.trim(),
-        'plate': plate.text.trim(),
-        'departure': departure.text.trim(),
-        'destination': destination.text.trim(),
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      // This record remains inactive until the owner approves the driver.
-      await db.collection('drivers').doc(user.uid).set({
-        'uid': user.uid,
-        'name': name.text.trim(),
-        'phone': phone.text.trim(),
-        'vehicle': vehicle.text.trim(),
-        'plate': plate.text.trim(),
-        'departure': departure.text.trim(),
-        'destination': destination.text.trim(),
-        'status': 'pending',
-        'active': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      if (!mounted) return;
-      message(context, 'تم إرسال الطلب. انتظر موافقة إدارة التطبيق.');
-      Navigator.pop(context);
-    } catch (e) {
-      if (mounted) message(context, errorText(e));
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
-  }
-
-  Widget field(TextEditingController c, String label) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: TextField(
-          controller: c,
-          decoration: InputDecoration(labelText: label),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('طلب اعتماد سائق')),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          field(name, 'الاسم الكامل'),
-          field(phone, 'رقم الهاتف'),
-          field(vehicle, 'نوع السيارة'),
-          field(plate, 'رقم اللوحة'),
-          field(departure, 'مدينة الانطلاق'),
-          field(destination, 'الوجهة'),
-          FilledButton(
-            onPressed: busy ? null : submit,
-            child: Text(busy ? 'يرجى الانتظار...' : 'إرسال الطلب'),
+            ),
+            icon: const Icon(Icons.event_seat),
+            label: const Text('حجز رحلة'),
           ),
           const SizedBox(height: 12),
-          const Text(
-            'إرسال الطلب لا يمنحك صلاحية السائق. يجب انتظار موافقة الإدارة.',
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MyBookingsPage(),
+              ),
+            ),
+            icon: const Icon(Icons.list_alt),
+            label: const Text('حجوزاتي'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const DriverApplicationPage(),
+              ),
+            ),
+            icon: const Icon(Icons.directions_bus),
+            label: const Text('طلب التسجيل كسائق'),
           ),
         ],
       ),
@@ -476,81 +279,131 @@ class BookingPage extends StatefulWidget {
 class _BookingPageState extends State<BookingPage> {
   final departure = TextEditingController();
   final destination = TextEditingController();
-  final date = TextEditingController();
-  final time = TextEditingController();
+  final contact = TextEditingController();
+
+  DateTime travelDate = DateTime.now().add(
+    const Duration(days: 1),
+  );
+  TimeOfDay travelTime = const TimeOfDay(hour: 8, minute: 0);
   int seat = 1;
   bool busy = false;
 
-  @override
-  void dispose() {
-    departure.dispose();
-    destination.dispose();
-    date.dispose();
-    time.dispose();
-    super.dispose();
-  }
-
-  Future<void> submit() async {
-    final user = auth.currentUser;
-    if (user == null) return;
-
-    if ([departure, destination, date, time]
-        .any((c) => c.text.trim().isEmpty)) {
-      message(context, 'يرجى إكمال جميع بيانات الرحلة.');
+  Future<void> saveBooking() async {
+    if (departure.text.trim().isEmpty ||
+        destination.text.trim().isEmpty ||
+        contact.text.trim().isEmpty) {
+      message(context, 'أكمل مكان الانطلاق والوصول ورقم الاتصال');
       return;
     }
+
+    final user = auth.currentUser;
+    if (user == null) return;
 
     setState(() => busy = true);
     try {
       await db.collection('booking_requests').add({
         'uid': user.uid,
-        'contact': user.email ?? user.phoneNumber ?? '',
+        'contact': contact.text.trim(),
         'departure': departure.text.trim(),
         'destination': destination.text.trim(),
-        'travelDate': date.text.trim(),
-        'travelTime': time.text.trim(),
+        'travelDate':
+            '${travelDate.year}-${travelDate.month.toString().padLeft(2, '0')}-${travelDate.day.toString().padLeft(2, '0')}',
+        'travelTime':
+            '${travelTime.hour.toString().padLeft(2, '0')}:${travelTime.minute.toString().padLeft(2, '0')}',
         'seat': seat,
-        'status': 'pending',
         'driverUid': '',
-        'confirmationDeadline': null,
+        'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
-      message(context, 'تم إرسال طلب الحجز. ينتظر تعيين سائق.');
-      Navigator.pop(context);
+      if (mounted) {
+        message(context, 'تم إرسال طلب الحجز');
+        Navigator.pop(context);
+      }
     } catch (e) {
-      if (mounted) message(context, errorText(e));
+      if (mounted) message(context, 'تعذّر حفظ الحجز: $e');
     } finally {
       if (mounted) setState(() => busy = false);
     }
   }
 
-  Widget field(TextEditingController c, String label, {String? hint}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: c,
-        decoration: InputDecoration(labelText: label, hintText: hint),
-      ),
-    );
+  @override
+  void dispose() {
+    departure.dispose();
+    destination.dispose();
+    contact.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('حجز مقعد')),
+      appBar: AppBar(title: const Text('حجز رحلة')),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         children: [
-          field(departure, 'مكان الانطلاق'),
-          field(destination, 'الوجهة'),
-          field(date, 'تاريخ الرحلة', hint: '2026-11-05'),
-          field(time, 'وقت الانطلاق', hint: '08:30'),
-          const Text('اختر المقعد'),
-          const SizedBox(height: 8),
+          TextField(
+            controller: departure,
+            decoration: const InputDecoration(
+              labelText: 'مكان الانطلاق',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: destination,
+            decoration: const InputDecoration(
+              labelText: 'مكان الوصول',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: contact,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'رقم الهاتف',
+            ),
+          ),
+          const SizedBox(height: 16),
+          ListTile(
+            title: const Text('تاريخ الرحلة'),
+            subtitle: Text(
+              '${travelDate.year}-${travelDate.month}-${travelDate.day}',
+            ),
+            trailing: const Icon(Icons.calendar_month),
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: travelDate,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(
+                  const Duration(days: 365),
+                ),
+              );
+              if (picked != null) {
+                setState(() => travelDate = picked);
+              }
+            },
+          ),
+          ListTile(
+            title: const Text('وقت الرحلة'),
+            subtitle: Text(travelTime.format(context)),
+            trailing: const Icon(Icons.access_time),
+            onTap: () async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: travelTime,
+              );
+              if (picked != null) {
+                setState(() => travelTime = picked);
+              }
+            },
+          ),
+          const SizedBox(height: 12),
           DropdownButtonFormField<int>(
             value: seat,
+            decoration: const InputDecoration(
+              labelText: 'رقم المقعد',
+            ),
             items: List.generate(
               8,
               (i) => DropdownMenuItem(
@@ -558,14 +411,14 @@ class _BookingPageState extends State<BookingPage> {
                 child: Text('المقعد ${i + 1}'),
               ),
             ),
-            onChanged: (v) {
-              if (v != null) setState(() => seat = v);
+            onChanged: (value) {
+              if (value != null) setState(() => seat = value);
             },
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
           FilledButton(
-            onPressed: busy ? null : submit,
-            child: Text(busy ? 'يرجى الانتظار...' : 'إرسال طلب الحجز'),
+            onPressed: busy ? null : saveBooking,
+            child: Text(busy ? 'جارٍ الحفظ...' : 'إرسال الحجز'),
           ),
         ],
       ),
@@ -576,89 +429,47 @@ class _BookingPageState extends State<BookingPage> {
 class MyBookingsPage extends StatelessWidget {
   const MyBookingsPage({super.key});
 
-  String statusLabel(String status) {
-    switch (status) {
-      case 'pending':
-        return 'في انتظار السائق';
-      case 'offered':
-        return 'في انتظار تأكيدك';
-      case 'confirmed':
-        return 'مؤكد';
-      case 'rejected':
-        return 'مرفوض';
-      case 'expired':
-        return 'انتهت المهلة';
-      case 'cancelled':
-        return 'ملغى';
-      default:
-        return status;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final user = auth.currentUser;
-    if (user == null) return const LoadingPage();
+    final uid = auth.currentUser!.uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('رحلاتي وحجوزاتي')),
+      appBar: AppBar(title: const Text('حجوزاتي')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: db
-            .collection('booking_requests')
-            .where('uid', isEqualTo: user.uid)
+        stream: db.collection('booking_requests')
+            .where('uid', isEqualTo: uid)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(
-              child: Text('تعذّر عرض الحجوزات. راجع قواعد Firestore.'),
-            );
+            return const Center(child: Text('تعذّر تحميل الحجوزات'));
           }
-          if (!snapshot.hasData) return const LoadingPage();
+          if (!snapshot.hasData) {
+            return const LoadingPage();
+          }
 
           final docs = snapshot.data!.docs;
           if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد حجوزات حتى الآن.'));
+            return const Center(child: Text('لا توجد حجوزات بعد'));
           }
 
           return ListView.builder(
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              final doc = docs[index];
-              final b = doc.data();
-              final status = b['status']?.toString() ?? 'pending';
-
+              final b = docs[index].data();
               return Card(
-                margin: const EdgeInsets.all(10),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text('التاريخ: ${b['travelDate'] ?? ''}'),
-                      Text('الوقت: ${b['travelTime'] ?? ''}'),
-                      Text('المقعد: ${b['seat'] ?? ''}'),
-                      Text('الحالة: ${statusLabel(status)}'),
-                      if (status == 'offered') ...[
-                        const SizedBox(height: 12),
-                        const Text(
-                          'السائق عرض عليك هذا الحجز. مهلة التأكيد '
-                          'تحتاج إلى تفعيل المنطق الخلفي وقواعد الأمان.',
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'لا تعتبر الرحلة مؤكدة حتى يظهر status = confirmed.',
-                        ),
-                      ],
-                    ],
+                margin: const EdgeInsets.all(8),
+                child: ListTile(
+                  leading: const Icon(Icons.event_seat),
+                  title: Text(
+                    '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
                   ),
+                  subtitle: Text(
+                    'التاريخ: ${b['travelDate'] ?? ''}\n'
+                    'الوقت: ${b['travelTime'] ?? ''}\n'
+                    'المقعد: ${b['seat'] ?? b['seat1'] ?? ''}\n'
+                    'الحالة: ${b['status'] ?? ''}',
+                  ),
+                  isThreeLine: true,
                 ),
               );
             },
@@ -669,33 +480,162 @@ class MyBookingsPage extends StatelessWidget {
   }
 }
 
-class DriverPage extends StatelessWidget {
-  const DriverPage({super.key});
+class DriverApplicationPage extends StatefulWidget {
+  const DriverApplicationPage({super.key});
 
-  Future<void> requestStop(BuildContext context) async {
+  @override
+  State<DriverApplicationPage> createState() =>
+      _DriverApplicationPageState();
+}
+
+class _DriverApplicationPageState
+    extends State<DriverApplicationPage> {
+  final name = TextEditingController();
+  final phone = TextEditingController();
+  bool busy = false;
+
+  Future<void> submit() async {
     final user = auth.currentUser;
     if (user == null) return;
 
+    if (name.text.trim().isEmpty || phone.text.trim().isEmpty) {
+      message(context, 'أدخل الاسم ورقم الهاتف');
+      return;
+    }
+
+    setState(() => busy = true);
     try {
-      await db.collection('driver_stop_requests').add({
+      final driverRef = db.collection('drivers').doc(user.uid);
+      final existing = await driverRef.get();
+
+      if (existing.exists) {
+        if (mounted) {
+          message(context, 'لديك طلب أو حساب سائق مسجّل بالفعل');
+        }
+        return;
+      }
+
+      final data = {
+        'uid': user.uid,
+        'name': name.text.trim(),
+        'phone': phone.text.trim(),
+        'status': 'pending',
+        'active': false,
+        'createdAt': FieldValue.serverTimestamp(),
+      };
+
+      await db.collection('driver_applications')
+          .doc(user.uid).set(data);
+      await driverRef.set(data);
+
+      if (mounted) {
+        message(context, 'أُرسل طلبك للإدارة للمراجعة');
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) message(context, 'تعذّر إرسال الطلب: $e');
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    phone.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('طلب اعتماد سائق')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'تسجيل الطلب لا يمنحك صلاحية القيادة تلقائيًا. '
+            'يجب انتظار موافقة الإدارة.',
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: name,
+            decoration: const InputDecoration(labelText: 'الاسم الكامل'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: phone,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: busy ? null : submit,
+            child: Text(busy ? 'يرجى الانتظار...' : 'إرسال الطلب'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class DriverStatusPage extends StatelessWidget {
+  final String status;
+  const DriverStatusPage({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final approved = status == 'approved';
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('حالة حساب السائق'),
+        actions: [
+          IconButton(
+            onPressed: () => auth.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            approved
+                ? 'حسابك معتمد، لكنه غير نشط حاليًا. اتصل بالإدارة.'
+                : 'طلبك قيد المراجعة. لا يمكنك العمل كسائق قبل اعتماد الإدارة.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 18),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DriverPage extends StatelessWidget {
+  const DriverPage({super.key});
+
+  Future<void> stopOperating(BuildContext context) async {
+    final user = auth.currentUser!;
+    try {
+      await db.collection('driver_stop_requests')
+          .doc(user.uid).set({
         'uid': user.uid,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
       if (context.mounted) {
-        message(
-          context,
-          'تم إرسال طلب إيقاف النشاط. يبقى الحساب فعالًا حتى تتخذ الإدارة إجراءً.',
-        );
+        message(context, 'أُرسل طلب إيقاف العمل إلى الإدارة');
       }
     } catch (e) {
-      if (context.mounted) message(context, errorText(e));
+      if (context.mounted) message(context, 'تعذّر إرسال الطلب: $e');
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = auth.currentUser!;
+    final uid = auth.currentUser!.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('مساحة السائق'),
@@ -706,51 +646,159 @@ class DriverPage extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
         children: [
-          const ListTile(
-            leading: Icon(Icons.verified_user, size: 36),
-            title: Text('حساب سائق معتمد'),
-            subtitle: Text('يمكنك متابعة الطلبات المعيّنة لحسابك.'),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: OutlinedButton(
+              onPressed: () => stopOperating(context),
+              child: const Text('إبلاغ الإدارة بالتوقف عن العمل'),
+            ),
           ),
           const Divider(),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: db
-                .collection('booking_requests')
-                .where('driverUid', isEqualTo: user.uid)
+          const Text('الحجوزات المسندة إليك'),
+          Expanded(
+            child: StreamBuilder<
+                QuerySnapshot<Map<String, dynamic>>>(
+              stream: db.collection('booking_requests')
+                  .where('driverUid', isEqualTo: uid)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text('تعذّر تحميل الحجوزات'),
+                  );
+                }
+                if (!snapshot.hasData) return const LoadingPage();
+
+                final docs = snapshot.data!.docs;
+                if (docs.isEmpty) {
+                  return const Center(
+                    child: Text('لا توجد حجوزات مسندة إليك'),
+                  );
+                }
+
+                return ListView(
+                  children: docs.map((doc) {
+                    final b = doc.data();
+                    return Card(
+                      child: ListTile(
+                        title: Text(
+                          '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
+                        ),
+                        subtitle: Text(
+                          '${b['travelDate'] ?? ''} '
+                          '${b['travelTime'] ?? ''}\n'
+                          'الحالة: ${b['status'] ?? ''}',
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AdminPage extends StatelessWidget {
+  const AdminPage({super.key});
+
+  Future<void> approveDriver(
+    BuildContext context,
+    String uid,
+  ) async {
+    try {
+      final batch = db.batch();
+      batch.update(db.collection('drivers').doc(uid), {
+        'status': 'approved',
+        'active': true,
+      });
+      batch.update(
+        db.collection('driver_applications').doc(uid),
+        {'status': 'approved'},
+      );
+      await batch.commit();
+
+      if (context.mounted) message(context, 'تم اعتماد السائق');
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّر اعتماد السائق: $e');
+      }
+    }
+  }
+
+  Future<void> suspendDriver(
+    BuildContext context,
+    String uid,
+  ) async {
+    try {
+      await db.collection('drivers').doc(uid).update({
+        'status': 'suspended',
+        'active': false,
+      });
+      if (context.mounted) message(context, 'تم إيقاف حساب السائق');
+    } catch (e) {
+      if (context.mounted) message(context, 'حدث خطأ: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إدارة Golden louage'),
+        actions: [
+          IconButton(
+            onPressed: () => auth.signOut(),
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          const Text(
+            'طلبات اعتماد السائقين',
+            style: TextStyle(fontSize: 20,
+                fontWeight: FontWeight.bold),
+          ),
+          StreamBuilder<
+              QuerySnapshot<Map<String, dynamic>>>(
+            stream: db.collection('driver_applications')
+                .where('status', isEqualTo: 'pending')
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Text(
-                  'تعذّر تحميل الطلبات. راجع قواعد Firestore.',
-                );
+                return const Text('تعذّر تحميل طلبات السائقين');
               }
               if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const LinearProgressIndicator();
               }
 
               final docs = snapshot.data!.docs;
               if (docs.isEmpty) {
                 return const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('لا توجد طلبات معيّنة لك حاليًا.'),
+                  padding: EdgeInsets.all(12),
+                  child: Text('لا توجد طلبات معلّقة'),
                 );
               }
 
               return Column(
                 children: docs.map((doc) {
-                  final b = doc.data();
+                  final d = doc.data();
                   return Card(
                     child: ListTile(
-                      title: Text(
-                        '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
-                      ),
-                      subtitle: Text(
-                        'التاريخ: ${b['travelDate'] ?? ''}\n'
-                        'الوقت: ${b['travelTime'] ?? ''}\n'
-                        'المقعد: ${b['seat'] ?? ''}\n'
-                        'الحالة: ${b['status'] ?? ''}',
+                      title: Text('${d['name'] ?? ''}'),
+                      subtitle: Text('${d['phone'] ?? ''}'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.check_circle,
+                            color: Colors.green),
+                        onPressed: () =>
+                            approveDriver(context, doc.id),
                       ),
                     ),
                   );
@@ -758,17 +806,41 @@ class DriverPage extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.pause_circle_outline),
-            label: const Text('طلب إيقاف النشاط'),
-            onPressed: () => requestStop(context),
-          ),
-          const SizedBox(height: 12),
+          const Divider(height: 32),
           const Text(
-            'قبول الطلبات وتأكيد المقاعد وإدارة المهلة ستُفعّل بعد '
-            'استكمال قواعد Firestore والمنطق الآمن في الخلفية.',
-            textAlign: TextAlign.center,
+            'السائقون المعتمدون',
+            style: TextStyle(fontSize: 20,
+                fontWeight: FontWeight.bold),
+          ),
+          StreamBuilder<
+              QuerySnapshot<Map<String, dynamic>>>(
+            stream: db.collection('drivers')
+                .where('status', isEqualTo: 'approved')
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const LinearProgressIndicator();
+              }
+
+              return Column(
+                children: snapshot.data!.docs.map((doc) {
+                  final d = doc.data();
+                  return Card(
+                    child: ListTile(
+                      title: Text('${d['name'] ?? doc.id}'),
+                      subtitle: Text(
+                        d['active'] == true ? 'نشط' : 'متوقف',
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.pause_circle),
+                        onPressed: () =>
+                            suspendDriver(context, doc.id),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
         ],
       ),
