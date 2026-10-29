@@ -2049,7 +2049,65 @@ class AboutGoldenLouagePage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class TermsAndConditionsPage extends StatelessWidget {
+  const TermsAndConditionsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الشروط والأحكام'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'شروط استخدام Golden louage',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            '1. الحسابات\n'
+            'يجب تقديم معلومات صحيحة عند إنشاء الحساب، '
+            'والمحافظة على سرية بيانات الدخول.\n\n'
+            '2. حجوزات المسافرين\n'
+            'على المسافر التحقق من الوجهة والتاريخ والوقت '
+            'والمقعد قبل إرسال الحجز.\n\n'
+            '3. حساب السائق\n'
+            'لا يُسمح باستخدام وظائف السائق إلا بعد '
+            'مراجعة الطلب واعتماد الحساب من الإدارة.\n\n'
+            '4. قبول الحجوزات\n'
+            'يجب على السائق متابعة الحجوزات المسندة إليه '
+            'والرد عليها وفق إجراءات التطبيق.\n\n'
+            '5. الدفع\n'
+            'تُحدَّد وسائل الدفع المتاحة وفق الخيارات '
+            'المعتمدة داخل التطبيق، بعد تفعيلها رسميًا.\n\n'
+            '6. الاستخدام المسؤول\n'
+            'يُمنع استخدام التطبيق في الاحتيال أو تقديم '
+            'معلومات مضللة أو الإضرار بالمستخدمين الآخرين.\n\n'
+            '7. التحديثات\n'
+            'قد تُحدَّث هذه الشروط عند إضافة ميزات جديدة '
+            'أو عند الحاجة إلى توضيح قواعد الاستخدام.',
+            style: TextStyle(fontSize: 16, height: 1.6),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'تنبيه: هذه صيغة أولية، ويجب مراجعتها '
+            'قانونيًا قبل نشر التطبيق.',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 
