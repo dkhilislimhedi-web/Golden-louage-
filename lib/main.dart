@@ -1339,6 +1339,95 @@ class DriverBookingResponsesPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class DriverBookingHistoryPage extends StatelessWidget {
+  const DriverBookingHistoryPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('سجل الحجوزات'),
+      ),
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('booking_requests')
+            .where('driverUid', isEqualTo: user.uid)
+            .where(
+              'status',
+              whereIn: ['accepted', 'rejected'],
+            )
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل سجل الحجوزات'),
+            );
+          }
+
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final bookings = snapshot.data!.docs;
+
+          if (bookings.isEmpty) {
+            return const Center(
+              child: Text('لا يوجد سجل حجوزات بعد'),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: bookings.length,
+            itemBuilder: (context, index) {
+              final booking = bookings[index].data();
+              final accepted =
+                  booking['status'] == 'accepted';
+
+              return Card(
+                child: ListTile(
+                  leading: Icon(
+                    accepted
+                        ? Icons.check_circle
+                        : Icons.cancel,
+                    color: accepted
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                  title: Text(
+                    '${booking['departure'] ?? ''} ← '
+                    '${booking['destination'] ?? ''}',
+                  ),
+                  subtitle: Text(
+                    'التاريخ: ${booking['travelDate'] ?? ''}\n'
+                    'الوقت: ${booking['travelTime'] ?? ''}\n'
+                    'المقعد: ${booking['seat'] ?? ''}',
+                  ),
+                  trailing: Text(
+                    accepted ? 'مقبول' : 'مرفوض',
+                  ),
+                  isThreeLine: true,
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 
