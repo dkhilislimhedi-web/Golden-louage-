@@ -1529,7 +1529,103 @@ class DriverProfilePage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class UserNotificationsPage extends StatelessWidget {
+  const UserNotificationsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('الإشعارات'),
+      ),
+      body: StreamBuilder<
+          QuerySnapshot<Map<String, dynamic>>>(
+        stream: db
+            .collection('users')
+            .doc(user.uid)
+            .collection('notifications')
+            .orderBy('createdAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('تعذّر تحميل الإشعارات'),
+            );
+          }
+
+          if (snapshot.connectionState ==
+              ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+
+          final notifications = snapshot.data?.docs ?? [];
+
+          if (notifications.isEmpty) {
+            return const Center(
+              child: Text('لا توجد إشعارات حاليًا'),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: notifications.length,
+            itemBuilder: (context, index) {
+              final notification =
+                  notifications[index].data();
+
+              final title =
+                  notification['title']?.toString() ??
+                  'إشعار جديد';
+
+              final body =
+                  notification['body']?.toString() ?? '';
+
+              final createdAt =
+                  notification['createdAt'];
+
+              String dateText = '';
+
+              if (createdAt is Timestamp) {
+                final date = createdAt.toDate();
+                dateText =
+                    '${date.day}/${date.month}/${date.year} '
+                    '${date.hour.toString().padLeft(2, '0')}:'
+                    '${date.minute.toString().padLeft(2, '0')}';
+              }
+
+              return Card(
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.notifications_active,
+                  ),
+                  title: Text(title),
+                  subtitle: Text(
+                    body.isEmpty
+                        ? dateText
+                        : '$body\n$dateText',
+                  ),
+                  isThreeLine: body.isNotEmpty,
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 
 
 
