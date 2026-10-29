@@ -1975,7 +1975,82 @@ class HelpAndSupportPage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class AboutGoldenLouagePage extends StatelessWidget {
+  const AboutGoldenLouagePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('حول التطبيق'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const SizedBox(height: 24),
+          const Icon(
+            Icons.directions_bus,
+            size: 84,
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Golden louage',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'منصة لتنظيم حجوزات سيارات اللواج '
+            'وتسهيل التواصل بين المسافرين والسائقين '
+            'المعتمدين.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16),
+          ),
+          const SizedBox(height: 24),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.event_seat),
+              title: Text('حجوزات منظمة'),
+              subtitle: Text(
+                'اختيار الوجهة والتاريخ والوقت والمقعد.',
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.verified_user),
+              title: Text('سائقون معتمدون'),
+              subtitle: Text(
+                'اعتماد السائقين يتم عن طريق إدارة التطبيق.',
+              ),
+            ),
+          ),
+          const Card(
+            child: ListTile(
+              leading: Icon(Icons.public),
+              title: Text('اللغات'),
+              subtitle: Text(
+                'العربية والفرنسية والإنجليزية ضمن خطة التطبيق.',
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'الإصدار: 1.0.0',
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 
