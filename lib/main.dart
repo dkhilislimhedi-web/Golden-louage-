@@ -1687,7 +1687,91 @@ class PassengerProfilePage extends StatelessWidget {
       ),
     );
   }
+
 }
+
+class PassengerSettingsPage extends StatelessWidget {
+  const PassengerSettingsPage({super.key});
+
+  Future<void> signOut(BuildContext context) async {
+    try {
+      await auth.signOut();
+
+      if (context.mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const LoginPage(),
+          ),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        message(context, 'تعذّر تسجيل الخروج: $e');
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('إعدادات الحساب'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const ListTile(
+            leading: Icon(Icons.language),
+            title: Text('اللغة'),
+            subtitle: Text(
+              'إعداد اللغات سيُستكمل في مرحلة الترجمة',
+            ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('تسجيل الخروج'),
+            onTap: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('تسجيل الخروج'),
+                  content: const Text(
+                    'هل تريد تسجيل الخروج من حسابك؟',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.pop(dialogContext, false),
+                      child: const Text('إلغاء'),
+                    ),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.pop(dialogContext, true),
+                      child: const Text('خروج'),
+                    ),
+                  ],
+                ),
+              );
+
+              if (confirm == true && context.mounted) {
+                await signOut(context);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 
 
 
