@@ -984,8 +984,6 @@ class DriverStopRequestsPage extends StatelessWidget {
   }
 }
 
-}
-
 class BookingManagementPage extends StatelessWidget {
   const BookingManagementPage({super.key});
 
