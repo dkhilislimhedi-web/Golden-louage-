@@ -55,15 +55,16 @@ jobs:
           pubspec = Path("pubspec.yaml")
           text = pubspec.read_text()
 
-          if "firebase_core:" not in text:
-              text = text.replace(
-                  "dependencies:",
-                  "dependencies:\n"
-                  "  firebase_core: ^4.2.1\n"
-                  "  firebase_auth: ^6.1.1\n"
-                  "  cloud_firestore: ^6.1.0",
-                  1
-              )
+          if "dependencies:" not in text:
+    raise SystemExit("dependencies section not found")
+
+if "cloud_functions:" not in text:
+    text = text.replace(
+        "dependencies:",
+        "dependencies:\n"
+        "  cloud_functions: ^6.1.0",
+        1
+    )
           pubspec.write_text(text)
           PY
 
