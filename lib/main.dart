@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1429,31 +1430,12 @@ class DriverBookingResponsesPage extends StatelessWidget {
     if (user == null) return;
 
     try {
-      final bookingRef =
-          db.collection('booking_requests').doc(bookingId);
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('respondToBooking');
 
-      await db.runTransaction((transaction) async {
-        final snapshot = await transaction.get(bookingRef);
-
-        if (!snapshot.exists) {
-          throw Exception('الحجز غير موجود');
-        }
-
-        final booking =
-            snapshot.data() as Map<String, dynamic>;
-
-        if (booking['driverUid'] != user.uid) {
-          throw Exception('هذا الحجز غير مسند إليك');
-        }
-
-        if (booking['status'] != 'confirmed') {
-          throw Exception('الحجز ليس في حالة تسمح بالرد');
-        }
-
-        transaction.update(bookingRef, {
-          'status': accept ? 'accepted' : 'rejected',
-          'driverRespondedAt': FieldValue.serverTimestamp(),
-        });
+      await callable.call({
+        'bookingId': bookingId,
+        'accept': accept,
       });
 
       if (context.mounted) {
@@ -1462,9 +1444,16 @@ class DriverBookingResponsesPage extends StatelessWidget {
           accept ? 'تم قبول الحجز' : 'تم رفض الحجز',
         );
       }
+    } on FirebaseFunctionsException catch (e) {
+      if (context.mounted) {
+        message(
+          context,
+          'تعذّر الرد على الحجز: ${e.message ?? e.code}',
+        );
+      }
     } catch (e) {
       if (context.mounted) {
-        message(context, 'تعذّر الرد على الحجز: $e');
+        message(context, 'حدث خطأ أثناء الرد على الحجز');
       }
     }
   }
@@ -1577,7 +1566,6 @@ class DriverBookingResponsesPage extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class DriverBookingHistoryPage extends StatelessWidget {
