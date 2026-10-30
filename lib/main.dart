@@ -525,48 +525,84 @@ class _BookingPageState extends State<BookingPage> {
   }
 }
 
+
 class MyBookingsPage extends StatelessWidget {
   const MyBookingsPage({super.key});
 
+  String bookingStatus(String? status) {
+    switch (status) {
+      case 'held':
+        return 'في انتظار التأكيد';
+      case 'confirmed':
+        return 'تم تأكيد الحجز';
+      case 'accepted':
+        return 'وافق السائق';
+      case 'rejected':
+        return 'رفض السائق';
+      case 'expired':
+        return 'انتهت مهلة الحجز';
+      case 'cancelled':
+        return 'ملغى';
+      default:
+        return status ?? 'غير محدد';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uid = auth.currentUser!.uid;
+    final user = auth.currentUser;
+
+    if (user == null) {
+      return const LoginPage();
+    }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('حجوزاتي')),
+      appBar: AppBar(
+        title: const Text('حجوزاتي'),
+      ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: db.collection('booking_requests')
-            .where('uid', isEqualTo: uid)
+        stream: db
+            .collection('booking_requests')
+            .where('uid', isEqualTo: user.uid)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(child: Text('تعذّر تحميل الحجوزات'));
+            return const Center(
+              child: Text('تعذّر تحميل الحجوزات'),
+            );
           }
+
           if (!snapshot.hasData) {
             return const LoadingPage();
           }
 
           final docs = snapshot.data!.docs;
+
           if (docs.isEmpty) {
-            return const Center(child: Text('لا توجد حجوزات بعد'));
+            return const Center(
+              child: Text('لا توجد حجوزات بعد'),
+            );
           }
 
           return ListView.builder(
+            padding: const EdgeInsets.all(8),
             itemCount: docs.length,
             itemBuilder: (context, index) {
-              final b = docs[index].data();
+              final booking = docs[index].data();
+
               return Card(
                 margin: const EdgeInsets.all(8),
                 child: ListTile(
                   leading: const Icon(Icons.event_seat),
                   title: Text(
-                    '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
+                    '${booking['departure'] ?? ''} ← '
+                    '${booking['destination'] ?? ''}',
                   ),
                   subtitle: Text(
-                    'التاريخ: ${b['travelDate'] ?? ''}\n'
-                    'الوقت: ${b['travelTime'] ?? ''}\n'
-                    'المقعد: ${b['seat'] ?? b['seat1'] ?? ''}\n'
-                    'الحالة: ${b['status'] ?? ''}',
+                    'التاريخ: ${booking['travelDate'] ?? ''}\n'
+                    'الوقت: ${booking['travelTime'] ?? ''}\n'
+                    'المقعد: ${booking['seat'] ?? ''}\n'
+                    'الحالة: ${bookingStatus(booking['status']?.toString())}',
                   ),
                   isThreeLine: true,
                 ),
@@ -578,7 +614,6 @@ class MyBookingsPage extends StatelessWidget {
     );
   }
 }
-
 class DriverApplicationPage extends StatefulWidget {
   const DriverApplicationPage({super.key});
 
