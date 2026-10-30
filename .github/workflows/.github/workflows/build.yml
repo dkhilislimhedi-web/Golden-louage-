@@ -1,0 +1,127 @@
+
+name: Build Golden Louage APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Create Flutter project structure
+        run: |
+          flutter create --project-name golden_louage --org com.goldenlouage .
+
+      - name: Configure Firebase and dependencies
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          settings = Path("android/settings.gradle.kts")
+          text = settings.read_text()
+          plugin = 'id("com.google.gms.google-services") version "4.4.4" apply false'
+
+          if "com.google.gms.google-services" not in text:
+              text = text.replace("plugins {", "plugins {\n    " + plugin, 1)
+          settings.write_text(text)
+
+          app_gradle = Path("android/app/build.gradle.kts")
+          text = app_gradle.read_text()
+          app_plugin = 'id("com.google.gms.google-services")'
+
+          if app_plugin not in text:
+              text = text.replace("plugins {", "plugins {\n    " + app_plugin, 1)
+          app_gradle.write_text(text)
+
+          pubspec = Path("pubspec.yaml")
+          text = pubspec.read_text()
+
+          dependencies = {
+              "firebase_core": "^4.2.1",
+              "firebase_auth": "^6.1.1",
+              "cloud_firestore": "^6.1.0",
+              "cloud_functions": "^6.1.0",
+          }
+
+          if "dependencies:" not in text:
+              raise SystemExit("dependencies section not found")
+
+          for package, version in dependencies.items():
+              if package + ":" not in text:
+                  text = text.replace(
+                      "dependencies:",
+                      "dependencies:\n  " + package + ": " + version,
+                      1
+                  )
+
+          pubspec.write_text(text)
+          PY
+
+      - name: Prepare Android debug signing key
+        run: |
+          mkdir -p "$HOME/.config/.android"
+
+          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -keystore "$HOME/.config/.android/debug.keystore" \
+              -storepass android \
+              -alias AndroidDebugKey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          keytool -list -v \
+            -keystore "$HOME/.config/.android/debug.keystore" \
+            -storepass android \
+            -alias AndroidDebugKey
+
+      - name: Build APK
+        run: |
+          flutter pub get
+          flutter build apk --release
+
+      - name: Print APK signing certificate SHA-1
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
+            -type f -name apksigner | sort -V | tail -n 1)
+
+          echo "========== APK CERTIFICATE =========="
+          "$APKSIGNER" verify --print-certs "$APK" | tee apk-certificate.txt
+
+          SHA1=$(sed -n 's/.*certificate SHA-1 digest: //p' apk-certificate.txt | head -n 1)
+
+          if [ -z "$SHA1" ]; then
+            echo "ERROR: Could not extract APK SHA-1"
+            exit 1
+          fi
+
+          echo "========== COPY THIS SHA-1 TO FIREBASE =========="
+          echo "$SHA1"
+
+          {
+            echo "## Golden Louage APK SHA-1"
+            echo ""
+            echo "\`$SHA1\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-louage-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
