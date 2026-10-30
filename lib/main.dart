@@ -354,7 +354,9 @@ class _BookingPageState extends State<BookingPage> {
   DateTime travelDate = DateTime.now().add(
     const Duration(days: 1),
   );
+
   TimeOfDay travelTime = const TimeOfDay(hour: 8, minute: 0);
+
   int seat = 1;
   bool busy = false;
 
@@ -370,30 +372,51 @@ class _BookingPageState extends State<BookingPage> {
     if (user == null) return;
 
     setState(() => busy = true);
+
     try {
-      await db.collection('booking_requests').add({
-        'uid': user.uid,
-        'contact': contact.text.trim(),
+      final functions = FirebaseFunctions.instance;
+
+      final createResult = await functions
+          .httpsCallable('createBooking')
+          .call({
         'departure': departure.text.trim(),
         'destination': destination.text.trim(),
+        'contact': contact.text.trim(),
         'travelDate':
             '${travelDate.year}-${travelDate.month.toString().padLeft(2, '0')}-${travelDate.day.toString().padLeft(2, '0')}',
         'travelTime':
             '${travelTime.hour.toString().padLeft(2, '0')}:${travelTime.minute.toString().padLeft(2, '0')}',
         'seat': seat,
-        'driverUid': '',
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      final bookingId =
+          createResult.data['bookingId'] as String;
+
+      await functions
+          .httpsCallable('confirmBooking')
+          .call({
+        'bookingId': bookingId,
       });
 
       if (mounted) {
-        message(context, 'تم إرسال طلب الحجز');
+        message(context, 'تم تأكيد الحجز بنجاح');
         Navigator.pop(context);
       }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        message(
+          context,
+          'تعذّر إتمام الحجز: ${e.message ?? e.code}',
+        );
+      }
     } catch (e) {
-      if (mounted) message(context, 'تعذّر حفظ الحجز: $e');
+      if (mounted) {
+        message(context, 'حدث خطأ أثناء الحجز');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -449,6 +472,7 @@ class _BookingPageState extends State<BookingPage> {
                   const Duration(days: 365),
                 ),
               );
+
               if (picked != null) {
                 setState(() => travelDate = picked);
               }
@@ -463,6 +487,7 @@ class _BookingPageState extends State<BookingPage> {
                 context: context,
                 initialTime: travelTime,
               );
+
               if (picked != null) {
                 setState(() => travelTime = picked);
               }
@@ -482,13 +507,17 @@ class _BookingPageState extends State<BookingPage> {
               ),
             ),
             onChanged: (value) {
-              if (value != null) setState(() => seat = value);
+              if (value != null) {
+                setState(() => seat = value);
+              }
             },
           ),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: busy ? null : saveBooking,
-            child: Text(busy ? 'جارٍ الحفظ...' : 'إرسال الحجز'),
+            child: Text(
+              busy ? 'جارٍ الحفظ...' : 'إرسال الحجز',
+            ),
           ),
         ],
       ),
