@@ -1,3 +1,4 @@
+
 name: Build Golden Louage APK
 
 on:
@@ -55,16 +56,24 @@ jobs:
           pubspec = Path("pubspec.yaml")
           text = pubspec.read_text()
 
-          if "dependencies:" not in text:
-    raise SystemExit("dependencies section not found")
+          dependencies = {
+              "firebase_core": "^4.2.1",
+              "firebase_auth": "^6.1.1",
+              "cloud_firestore": "^6.1.0",
+              "cloud_functions": "^6.1.0",
+          }
 
-if "cloud_functions:" not in text:
-    text = text.replace(
-        "dependencies:",
-        "dependencies:\n"
-        "  cloud_functions: ^6.1.0",
-        1
-    )
+          if "dependencies:" not in text:
+              raise SystemExit("dependencies section not found")
+
+          for package, version in dependencies.items():
+              if package + ":" not in text:
+                  text = text.replace(
+                      "dependencies:",
+                      "dependencies:\n  " + package + ": " + version,
+                      1
+                  )
+
           pubspec.write_text(text)
           PY
 
