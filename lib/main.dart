@@ -630,21 +630,29 @@ class _DriverApplicationPageState
 
   Future<void> submit() async {
     final user = auth.currentUser;
-    if (user == null) return;
 
-    if (name.text.trim().isEmpty || phone.text.trim().isEmpty) {
+    if (user == null) {
+      message(context, 'يجب تسجيل الدخول أولاً');
+      return;
+    }
+
+    if (name.text.trim().isEmpty ||
+        phone.text.trim().isEmpty) {
       message(context, 'أدخل الاسم ورقم الهاتف');
       return;
     }
 
     setState(() => busy = true);
+
     try {
-      final driverRef = db.collection('drivers').doc(user.uid);
-      final existing = await driverRef.get();
+      final applicationRef =
+          db.collection('driver_applications').doc(user.uid);
+
+      final existing = await applicationRef.get();
 
       if (existing.exists) {
         if (mounted) {
-          message(context, 'لديك طلب أو حساب سائق مسجّل بالفعل');
+          message(context, 'لديك طلب اعتماد مسجّل بالفعل');
         }
         return;
       }
@@ -654,22 +662,23 @@ class _DriverApplicationPageState
         'name': name.text.trim(),
         'phone': phone.text.trim(),
         'status': 'pending',
-        'active': false,
         'createdAt': FieldValue.serverTimestamp(),
       };
 
-      await db.collection('driver_applications')
-          .doc(user.uid).set(data);
-      await driverRef.set(data);
+      await applicationRef.set(data);
 
       if (mounted) {
         message(context, 'أُرسل طلبك للإدارة للمراجعة');
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) message(context, 'تعذّر إرسال الطلب: $e');
+      if (mounted) {
+        message(context, 'تعذّر إرسال الطلب: $e');
+      }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -683,7 +692,9 @@ class _DriverApplicationPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('طلب اعتماد سائق')),
+      appBar: AppBar(
+        title: const Text('طلب اعتماد سائق'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -694,18 +705,24 @@ class _DriverApplicationPageState
           const SizedBox(height: 16),
           TextField(
             controller: name,
-            decoration: const InputDecoration(labelText: 'الاسم الكامل'),
+            decoration: const InputDecoration(
+              labelText: 'الاسم الكامل',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: phone,
             keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(labelText: 'رقم الهاتف'),
+            decoration: const InputDecoration(
+              labelText: 'رقم الهاتف',
+            ),
           ),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: busy ? null : submit,
-            child: Text(busy ? 'يرجى الانتظار...' : 'إرسال الطلب'),
+            child: Text(
+              busy ? 'يرجى الانتظار...' : 'إرسال الطلب',
+            ),
           ),
         ],
       ),
