@@ -681,11 +681,13 @@ class DriverStatusPage extends StatelessWidget {
   }
 }
 
+
 class DriverPage extends StatelessWidget {
   const DriverPage({super.key});
 
   Future<void> stopOperating(BuildContext context) async {
     final user = auth.currentUser!;
+
     try {
       await db.collection('driver_stop_requests')
           .doc(user.uid).set({
@@ -693,12 +695,36 @@ class DriverPage extends StatelessWidget {
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
       });
+
       if (context.mounted) {
         message(context, 'أُرسل طلب إيقاف العمل إلى الإدارة');
       }
     } catch (e) {
-      if (context.mounted) message(context, 'تعذّر إرسال الطلب: $e');
+      if (context.mounted) {
+        message(context, 'تعذّر إرسال الطلب: $e');
+      }
     }
+  }
+
+  Widget driverMenuButton(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Widget page,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: OutlinedButton.icon(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => page),
+          );
+        },
+        icon: Icon(icon),
+        label: Text(title),
+      ),
+    );
   }
 
   @override
@@ -712,66 +738,128 @@ class DriverPage extends StatelessWidget {
           IconButton(
             onPressed: () => auth.signOut(),
             icon: const Icon(Icons.logout),
+            tooltip: 'تسجيل الخروج',
           ),
         ],
       ),
-      body: Column(
+
+      body: ListView(
+        padding: const EdgeInsets.all(12),
         children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: OutlinedButton(
-              onPressed: () => stopOperating(context),
-              child: const Text('إبلاغ الإدارة بالتوقف عن العمل'),
+          const Text(
+            'مرحبًا بك في مساحة السائق',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const Divider(),
-          const Text('الحجوزات المسندة إليك'),
-          Expanded(
-            child: StreamBuilder<
-                QuerySnapshot<Map<String, dynamic>>>(
-              stream: db.collection('booking_requests')
-                  .where('driverUid', isEqualTo: uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(
-                    child: Text('تعذّر تحميل الحجوزات'),
-                  );
-                }
-                if (!snapshot.hasData) return const LoadingPage();
 
-                final docs = snapshot.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(
-                    child: Text('لا توجد حجوزات مسندة إليك'),
-                  );
-                }
+          const SizedBox(height: 16),
 
-                return ListView(
-                  children: docs.map((doc) {
-                    final b = doc.data();
-                    return Card(
-                      child: ListTile(
-                        title: Text(
-                          '${b['departure'] ?? ''} ← ${b['destination'] ?? ''}',
-                        ),
-                        subtitle: Text(
-                          '${b['travelDate'] ?? ''} '
-                          '${b['travelTime'] ?? ''}\n'
-                          'الحالة: ${b['status'] ?? ''}',
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
+          driverMenuButton(
+            context,
+            title: 'الرد على الحجوزات',
+            icon: Icons.notifications_active,
+            page: const DriverBookingResponsesPage(),
+          ),
+
+          driverMenuButton(
+            context,
+            title: 'سجل الحجوزات',
+            icon: Icons.history,
+            page: const DriverBookingHistoryPage(),
+          ),
+
+          driverMenuButton(
+            context,
+            title: 'ملفي الشخصي',
+            icon: Icons.person,
+            page: const DriverProfilePage(),
+          ),
+
+          driverMenuButton(
+            context,
+            title: 'الإعدادات',
+            icon: Icons.settings,
+            page: const DriverSettingsPage(),
+          ),
+
+          const Divider(height: 30),
+
+          OutlinedButton.icon(
+            onPressed: () => stopOperating(context),
+            icon: const Icon(Icons.pause_circle),
+            label: const Text(
+              'إبلاغ الإدارة بالتوقف عن العمل',
             ),
+          ),
+
+          const Divider(height: 30),
+
+          const Text(
+            'الحجوزات المسندة إليك',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: db.collection('booking_requests')
+                .where('driverUid', isEqualTo: uid)
+                .snapshots(),
+
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Text(
+                  'تعذّر تحميل الحجوزات',
+                );
+              }
+
+              if (!snapshot.hasData) {
+                return const LinearProgressIndicator();
+              }
+
+              final docs = snapshot.data!.docs;
+
+              if (docs.isEmpty) {
+                return const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'لا توجد حجوزات مسندة إليك',
+                  ),
+                );
+              }
+
+              return Column(
+                children: docs.map((doc) {
+                  final b = doc.data();
+
+                  return Card(
+                    child: ListTile(
+                      title: Text(
+                        '${b['departure'] ?? ''} ← '
+                        '${b['destination'] ?? ''}',
+                      ),
+                      subtitle: Text(
+                        '${b['travelDate'] ?? ''} '
+                        '${b['travelTime'] ?? ''}\n'
+                        'الحالة: ${b['status'] ?? ''}',
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
         ],
       ),
     );
   }
 }
+
 
 
 class AdminPage extends StatelessWidget {
