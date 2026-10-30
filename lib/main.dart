@@ -205,8 +205,30 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+
 class PassengerPage extends StatelessWidget {
   const PassengerPage({super.key});
+
+  Widget menuButton(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required Widget page,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: OutlinedButton.icon(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => page),
+          );
+        },
+        icon: Icon(icon),
+        label: Text(title),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +239,7 @@ class PassengerPage extends StatelessWidget {
           IconButton(
             onPressed: () => auth.signOut(),
             icon: const Icon(Icons.logout),
+            tooltip: 'تسجيل الخروج',
           ),
         ],
       ),
@@ -225,12 +248,15 @@ class PassengerPage extends StatelessWidget {
         children: [
           const Text(
             'مرحبًا بك',
-            style: TextStyle(fontSize: 25,
-                fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
           const Text('احجز مقعدك وتابع حالة رحلتك.'),
           const SizedBox(height: 24),
+
           FilledButton.icon(
             onPressed: () => Navigator.push(
               context,
@@ -241,18 +267,60 @@ class PassengerPage extends StatelessWidget {
             icon: const Icon(Icons.event_seat),
             label: const Text('حجز رحلة'),
           ),
+
           const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const MyBookingsPage(),
-              ),
-            ),
-            icon: const Icon(Icons.list_alt),
-            label: const Text('حجوزاتي'),
+
+          menuButton(
+            context,
+            title: 'حجوزاتي',
+            icon: Icons.list_alt,
+            page: const MyBookingsPage(),
           ),
-          const SizedBox(height: 12),
+
+          menuButton(
+            context,
+            title: 'الإشعارات',
+            icon: Icons.notifications,
+            page: const UserNotificationsPage(),
+          ),
+
+          menuButton(
+            context,
+            title: 'ملفي الشخصي',
+            icon: Icons.person,
+            page: const PassengerProfilePage(),
+          ),
+
+          menuButton(
+            context,
+            title: 'الإعدادات',
+            icon: Icons.settings,
+            page: const PassengerSettingsPage(),
+          ),
+
+          menuButton(
+            context,
+            title: 'المساعدة والدعم',
+            icon: Icons.help_outline,
+            page: const HelpAndSupportPage(),
+          ),
+
+          menuButton(
+            context,
+            title: 'حول Golden louage',
+            icon: Icons.info_outline,
+            page: const AboutGoldenLouagePage(),
+          ),
+
+          menuButton(
+            context,
+            title: 'الشروط والأحكام',
+            icon: Icons.description,
+            page: const TermsAndConditionsPage(),
+          ),
+
+          const Divider(height: 30),
+
           OutlinedButton.icon(
             onPressed: () => Navigator.push(
               context,
@@ -268,6 +336,7 @@ class PassengerPage extends StatelessWidget {
     );
   }
 }
+
 
 class BookingPage extends StatefulWidget {
   const BookingPage({super.key});
