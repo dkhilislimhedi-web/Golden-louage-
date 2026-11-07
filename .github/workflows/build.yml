@@ -1,135 +1,301 @@
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-name: Build Golden Louage APK
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(const GoldenLouageApp());
+}
 
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
+class GoldenLouageApp extends StatelessWidget {
+  const GoldenLouageApp({super.key});
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Golden Louage',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.amber,
+        scaffoldBackgroundColor: const Color(0xFFF9F6F0),
+      ),
+      home: const MainHomeScreen(),
+    );
+  }
+}
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+// ================= الشاشة الرئيسية للتطبيق =================
+class MainHomeScreen extends StatelessWidget {
+  const MainHomeScreen({super.key});
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Golden Louage - التونسي للواجات'),
+        centerTitle: true,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.directions_car_filled, size: 80, color: Colors.amber),
+              const SizedBox(height: 15),
+              const Text(
+                'مرحباً بك في تطبيق Golden Louage',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
 
-      - name: Create Flutter project structure
-        run: |
-          flutter create --project-name golden_louage --org com.goldenlouage .
+              // زر دخول الإدارة
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.admin_panel_settings, size: 28),
+                label: const Text('دخول الإدارة (Admin)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AdminLoginScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
 
-      - name: Configure Android signing and Firebase
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
+              // زر بوابة الركاب
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.person, color: Colors.blue, size: 28),
+                label: const Text('بوابة الركاب', style: TextStyle(fontSize: 18)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PassengerAuthScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
 
-          settings = Path("android/settings.gradle.kts")
-          text = settings.read_text()
-          plugin = 'id("com.google.gms.google-services") version "4.4.4" apply false'
+              // زر بوابة السواق
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 55),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.drive_eta, color: Colors.orange, size: 28),
+                label: const Text('بوابة السواق (طلب اعتماد)', style: TextStyle(fontSize: 18)),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const DriverApplicationScreen()),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-          if "com.google.gms.google-services" not in text:
-              text = text.replace(
-                  "plugins {",
-                  "plugins {\n    " + plugin,
-                  1
-              )
-          settings.write_text(text)
+// ================= شاشة دخول الإدارة =================
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({super.key});
 
-          app_gradle = Path("android/app/build.gradle.kts")
-          text = app_gradle.read_text()
-          app_plugin = 'id("com.google.gms.google-services")'
+  @override
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
+}
 
-          if app_plugin not in text:
-              text = text.replace(
-                  "plugins {",
-                  "plugins {\n    " + app_plugin,
-                  1
-              )
-          app_gradle.write_text(text)
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool isLoading = false;
 
-          pubspec = Path("pubspec.yaml")
-          text = pubspec.read_text()
+  Future<void> _loginAdmin() async {
+    setState(() => isLoading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
 
-          dependencies = {
-              "firebase_core": "^4.2.1",
-              "firebase_auth": "^6.1.1",
-              "cloud_firestore": "^6.1.0",
-              "cloud_functions": "^6.1.0",
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطأ في تسجيل الدخول: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('تسجيل دخول المدير'), backgroundColor: Colors.red, foregroundColor: Colors.white),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.lock_person, size: 80, color: Colors.red),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'البريد الإلكتروني', prefixIcon: Icon(Icons.email)),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: 'كلمة السر', prefixIcon: Icon(Icons.lock)),
+            ),
+            const SizedBox(height: 25),
+            isLoading
+                ? const CircularProgressIndicator()
+                : ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                    ),
+                    onPressed: _loginAdmin,
+                    child: const Text('دخول لوحة التحكم', style: TextStyle(fontSize: 16)),
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================= لوحة تحكم المدير =================
+class AdminDashboardScreen extends StatelessWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('لوحة تحكم المدير'),
+        backgroundColor: Colors.red,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            },
+          )
+        ],
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('driver_applications').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('لا توجد طلبات اعتماد سائق حالياً.', style: TextStyle(fontSize: 16)));
           }
 
-          if "dependencies:" not in text:
-              raise SystemExit("dependencies section not found")
+          final docs = snapshot.data!.docs;
 
-          for package, version in dependencies.items():
-              if package + ":" not in text:
-                  text = text.replace(
-                      "dependencies:",
-                      "dependencies:\n  " + package + ": " + version,
-                      1
-                  )
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final docId = docs[index].id;
+              final status = data['status'] ?? 'pending';
 
-          pubspec.write_text(text)
-          PY
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  title: Text('${data['name']} ${data['surname']} (واج: ${data['matricule']})', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('الهاتف: ${data['phone']}\nخط السير: ${data['departure']} ➔ ${data['destination']}\nالحالة: $status'),
+                  isThreeLine: true,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.check_circle, color: Colors.green, size: 30),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('driver_applications').doc(docId).update({'status': 'approved'});
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت الموافقة على السائق')));
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.red, size: 30),
+                        onPressed: () async {
+                          await FirebaseFirestore.instance.collection('driver_applications').doc(docId).update({'status': 'rejected'});
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم رفض السائق')));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
 
-      - name: Prepare Android debug signing key
-        run: |
-          mkdir -p "$HOME/.config/.android"
+// ================= استمارة طلب اعتماد سائق =================
+class DriverApplicationScreen extends StatelessWidget {
+  const DriverApplicationScreen({super.key});
 
-          if [ ! -f "$HOME/.config/.android/debug.keystore" ]; then
-            keytool -genkeypair \
-              -keystore "$HOME/.config/.android/debug.keystore" \
-              -storepass android \
-              -alias AndroidDebugKey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('بوابة السواق')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Text('استمارة تسجيل السائق ستظهر هنا بكل تفاصيلها قريباً.', textAlign: TextAlign.center, style: TextStyle(fontSize: 18)),
+        ),
+      ),
+    );
+  }
+}
 
-          keytool -list -v \
-            -keystore "$HOME/.config/.android/debug.keystore" \
-            -storepass android \
-            -alias AndroidDebugKey
+// ================= بوابة الركاب =================
+class PassengerAuthScreen extends StatelessWidget {
+  const PassengerAuthScreen({super.key});
 
-      - name: Build APK
-        run: |
-          flutter pub get
-          flutter build apk --release
-
-      - name: Print APK signing certificate SHA-1
-        run: |
-          APK="build/app/outputs/flutter-apk/app-release.apk"
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" \
-            -type f -name apksigner | sort -V | tail -n 1)
-
-          echo "========== APK CERTIFICATE =========="
-          "$APKSIGNER" verify --print-certs "$APK" | tee apk-certificate.txt
-
-          SHA1=$(sed -n 's/.*certificate SHA-1 digest: //p' apk-certificate.txt | head -n 1)
-
-          if [ -z "$SHA1" ]; then
-            echo "ERROR: Could not extract APK SHA-1"
-            exit 1
-          fi
-
-          echo "========== COPY THIS SHA-1 TO FIREBASE =========="
-          echo "$SHA1"
-
-          {
-            echo "## Golden Louage APK SHA-1"
-            echo ""
-            echo "\`$SHA1\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: golden-louage-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('بوابة الركاب')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: Text('واجهة طلبات الركاب ستظهر هنا بكل تفاصيلها قريباً.', textAlign: TextAlign.center, style: TextStyle(fontSize: 18)),
+        ),
+      ),
+    );
+  }
+}
