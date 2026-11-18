@@ -275,7 +275,7 @@ class _PassengerHomeState extends State<PassengerHome> {
 
                     if (!stationsLoading && stations.isNotEmpty) ...[
                       DropdownButtonFormField<String>(
-                        value: originId,
+                        initialValue: originId,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'محطة الانطلاق',
@@ -298,7 +298,7 @@ class _PassengerHomeState extends State<PassengerHome> {
                       const SizedBox(height: 18),
 
                       DropdownButtonFormField<String>(
-                        value: destinationId,
+                        initialValue: destinationId,
                         isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'محطة الوصول',
