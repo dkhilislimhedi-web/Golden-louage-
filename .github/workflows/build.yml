@@ -11,17 +11,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.19.x'
 
-      - name: Install Dependencies
+      - name: Generate Android project
+        run: |
+          flutter create --platforms=android --org com.goldenlouage --project-name golden_louage /tmp/golden_scaffold
+          mkdir -p android
+          cp -R /tmp/golden_scaffold/android/. android/
+
+      - name: Install dependencies
         run: flutter pub get
+
+      - name: Analyze Flutter code
+        run: flutter analyze
 
       - name: Build APK
         run: flutter build apk --release
