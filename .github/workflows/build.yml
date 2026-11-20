@@ -31,6 +31,11 @@ jobs:
           mkdir -p android
           cp -R /tmp/golden_scaffold/android/. android/
 
+      - name: Add foreground GPS permissions
+        run: |
+          sed -i '/<application/i\\    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i\\    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>' android/app/src/main/AndroidManifest.xml
+
       - name: Install dependencies
         run: flutter pub get
 
