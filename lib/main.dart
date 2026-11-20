@@ -421,20 +421,49 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
   bool _loading = true;
   String _message = '';
   Timer? _timer;
+  Timer? _holdTimer;
   String? _trackingTripId;
   String _locationText = '';
 
+  final Set<String> _confirmingBookings = {};
+  final Map<String, String> _driverPhones = {};
 
-  Future<Map<String, dynamic>> _request(String method, String path) async {
-    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+  bool get _isArabic => appLocale.value.languageCode != 'en';
+
+  String _bookingId(Map<String, dynamic> booking) {
+    return (booking['id'] ??
+            booking['bookingId'] ??
+            booking['documentId'] ??
+            '')
+        .toString();
+  }
+
+  Future<Map<String, dynamic>> _request(
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final token =
+        await FirebaseAuth.instance.currentUser?.getIdToken();
     if (token == null) throw Exception('يلزم تسجيل الدخول');
 
     final uri = Uri.parse('$_apiUrl$path');
-    final response = method == 'GET'
-        ? await http.get(uri, headers: {'Authorization': 'Bearer $token'})
-        : await http.post(uri, headers: {'Authorization': 'Bearer $token'});
+    final headers = {
+      'Authorization': 'Bearer $token',
+      if (body != null) 'Content-Type': 'application/json',
+    };
 
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final response = method == 'GET'
+        ? await http.get(uri, headers: headers)
+        : await http.post(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          );
+
+    final data =
+        jsonDecode(response.body) as Map<String, dynamic>;
+
     if (response.statusCode < 200 ||
         response.statusCode >= 300 ||
         data['success'] != true) {
@@ -447,20 +476,49 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
   void initState() {
     super.initState();
     _loadBookings();
+
+    _holdTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (mounted &&
+            _bookings.any(
+              (b) => b is Map && b['status'] == 'held',
+            )) {
+          setState(() {});
+        }
+      },
+    );
   }
 
   Future<void> _loadBookings() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _message = '';
     });
+
     try {
       final data = await _request('GET', '/bookings/mine');
       if (!mounted) return;
+
+      final bookings = (data['bookings'] as List?) ?? [];
       setState(() {
-        _bookings = (data['bookings'] as List?) ?? [];
+        _bookings = bookings;
         _loading = false;
       });
+
+      for (final item in bookings) {
+        if (item is! Map) continue;
+        final booking = Map<String, dynamic>.from(item);
+        final status = booking['status']?.toString() ?? '';
+        final tripId = booking['tripId']?.toString() ?? '';
+
+        if (tripId.isNotEmpty &&
+            ['pending', 'held', 'confirmed'].contains(status) &&
+            !_driverPhones.containsKey(tripId)) {
+          _loadDriverPhone(tripId);
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -470,22 +528,92 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
     }
   }
 
+  Future<void> _loadDriverPhone(String tripId) async {
+    try {
+      final data = await _request(
+        'GET',
+        '/trips/${Uri.encodeComponent(tripId)}',
+      );
+      final trip = data['trip'];
+      final phone = trip is Map
+          ? (trip['driverPhone'] ?? '').toString()
+          : '';
+
+      if (mounted && phone.isNotEmpty) {
+        setState(() => _driverPhones[tripId] = phone);
+      }
+    } catch (_) {
+      // قد لا تسمح حالة الحجز بعرض تفاصيل الرحلة.
+    }
+  }
+
+  Future<void> _confirmBooking(
+    Map<String, dynamic> booking,
+  ) async {
+    final id = _bookingId(booking);
+    if (id.isEmpty || _confirmingBookings.contains(id)) return;
+
+    setState(() => _confirmingBookings.add(id));
+
+    try {
+      await _request(
+        'POST',
+        '/bookings/${Uri.encodeComponent(id)}/confirm',
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isArabic
+                ? 'تم تأكيد الحجز بنجاح'
+                : 'Booking confirmed successfully',
+          ),
+        ),
+      );
+      await _loadBookings();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+      await _loadBookings();
+    } finally {
+      if (mounted) {
+        setState(() => _confirmingBookings.remove(id));
+      }
+    }
+  }
+
   Future<void> _loadLocation(String tripId) async {
     try {
-      final data = await _request('GET', '/trips/$tripId/location');
+      final data = await _request(
+        'GET',
+        '/trips/${Uri.encodeComponent(tripId)}/location',
+      );
       if (!mounted || _trackingTripId != tripId) return;
+
       final location = data['location'];
       if (data['isLive'] == true && location is Map) {
         setState(() {
           _locationText =
-              'خط العرض: ${location['latitude']}\\nخط الطول: ${location['longitude']}';
+              'خط العرض: ${location['latitude']}\n'
+              'خط الطول: ${location['longitude']}';
         });
       } else {
-        setState(() => _locationText = 'موقع السائق غير متاح حالياً');
+        setState(() {
+          _locationText = _isArabic
+              ? 'موقع السائق غير متاح حالياً'
+              : 'Driver location is currently unavailable';
+        });
       }
     } catch (_) {
       if (mounted && _trackingTripId == tripId) {
-        setState(() => _locationText = 'موقع السائق غير متاح حالياً');
+        setState(() {
+          _locationText = _isArabic
+              ? 'موقع السائق غير متاح حالياً'
+              : 'Driver location is currently unavailable';
+        });
       }
     }
   }
@@ -494,8 +622,11 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
     _timer?.cancel();
     setState(() {
       _trackingTripId = tripId;
-      _locationText = 'جارٍ جلب موقع السائق...';
+      _locationText = _isArabic
+          ? 'جارٍ جلب موقع السائق...'
+          : 'Loading driver location...';
     });
+
     _loadLocation(tripId);
     _timer = Timer.periodic(
       const Duration(seconds: 20),
@@ -503,15 +634,63 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
     );
   }
 
+  String _statusText(String status) {
+    if (!_isArabic) {
+      switch (status) {
+        case 'pending':
+          return 'Waiting for driver';
+        case 'held':
+          return 'Waiting for your confirmation';
+        case 'confirmed':
+          return 'Confirmed';
+        case 'rejected':
+          return 'Rejected';
+        case 'cancelled':
+          return 'Cancelled';
+        case 'expired':
+          return 'Expired';
+        default:
+          return status;
+      }
+    }
+
+    switch (status) {
+      case 'pending':
+        return 'في انتظار موافقة السائق';
+      case 'held':
+        return 'في انتظار تأكيدك';
+      case 'confirmed':
+        return 'مؤكد';
+      case 'rejected':
+        return 'مرفوض';
+      case 'cancelled':
+        return 'ملغى';
+      case 'expired':
+        return 'انتهت المهلة';
+      default:
+        return status;
+    }
+  }
+
+  String _countdown(Duration remaining) {
+    final seconds = remaining.inSeconds;
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${rest.toString().padLeft(2, '0')}';
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    _holdTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isArabic = appLocale == 'ar';
+    final isArabic = _isArabic;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(isArabic ? 'حجوزاتي' : 'My bookings'),
@@ -528,24 +707,48 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
               ? Center(child: Text(_message))
               : _bookings.isEmpty
                   ? Center(
-                      child: Text(isArabic ? 'لا توجد حجوزات' : 'No bookings'),
+                      child: Text(
+                        isArabic ? 'لا توجد حجوزات' : 'No bookings',
+                      ),
                     )
                   : ListView.builder(
                       padding: const EdgeInsets.all(12),
                       itemCount: _bookings.length,
                       itemBuilder: (context, index) {
-                        final booking = _bookings[index]
-                            as Map<String, dynamic>;
-                        final status = booking['status']?.toString() ?? '';
-                        final tripId = booking['tripId']?.toString() ?? '';
+                        final booking =
+                            Map<String, dynamic>.from(
+                          _bookings[index] as Map,
+                        );
+
+                        final status =
+                            booking['status']?.toString() ?? '';
+                        final tripId =
+                            booking['tripId']?.toString() ?? '';
+                        final id = _bookingId(booking);
+                        final expiresAt = DateTime.tryParse(
+                          booking['holdExpiresAt']?.toString() ?? '',
+                        );
+                        final remaining = expiresAt == null
+                            ? Duration.zero
+                            : expiresAt.difference(DateTime.now());
+                        final canConfirm = status == 'held' &&
+                            expiresAt != null &&
+                            remaining > Duration.zero &&
+                            id.isNotEmpty;
+                        final confirming =
+                            _confirmingBookings.contains(id);
+                        final phone = _driverPhones[tripId] ?? '';
+
                         return Card(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
                             child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${booking['origin'] ?? ''} ← ${booking['destination'] ?? ''}',
+                                  '${booking['origin'] ?? ''} ← '
+                                  '${booking['destination'] ?? ''}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -553,15 +756,69 @@ class _PassengerBookingsScreenState extends State<PassengerBookingsScreen> {
                                 const SizedBox(height: 6),
                                 Text(
                                   isArabic
-                                      ? 'حالة الحجز: $status'
-                                      : 'Booking status: $status',
+                                      ? 'حالة الحجز: ${_statusText(status)}'
+                                      : 'Booking status: ${_statusText(status)}',
                                 ),
                                 Text(
                                   isArabic
                                       ? 'رقم السيارة: ${booking['vehicleRegistration'] ?? 'غير متوفر'}'
                                       : 'Vehicle: ${booking['vehicleRegistration'] ?? 'Unavailable'}',
                                 ),
-                                if (status == 'confirmed' && tripId.isNotEmpty)
+                                if (phone.isNotEmpty)
+                                  SelectableText(
+                                    isArabic
+                                        ? 'هاتف السائق: $phone'
+                                        : 'Driver phone: $phone',
+                                  ),
+                                if (status == 'held') ...[
+                                  const SizedBox(height: 8),
+                                  if (expiresAt == null)
+                                    Text(
+                                      isArabic
+                                          ? 'تعذر تحديد وقت انتهاء المهلة. حدّث القائمة.'
+                                          : 'Expiry time unavailable. Refresh the list.',
+                                    )
+                                  else if (remaining > Duration.zero) ...[
+                                    Text(
+                                      isArabic
+                                          ? 'الوقت المتبقي للتأكيد: ${_countdown(remaining)}'
+                                          : 'Time left to confirm: ${_countdown(remaining)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: confirming || !canConfirm
+                                            ? null
+                                            : () => _confirmBooking(booking),
+                                        child: confirming
+                                            ? const SizedBox(
+                                                width: 20,
+                                                height: 20,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : Text(
+                                                isArabic
+                                                    ? 'تأكيد الحجز'
+                                                    : 'Confirm booking',
+                                              ),
+                                      ),
+                                    ),
+                                  ] else
+                                    Text(
+                                      isArabic
+                                          ? 'انتهت مهلة التأكيد. حدّث القائمة.'
+                                          : 'Confirmation time expired. Refresh the list.',
+                                    ),
+                                ],
+                                if (status == 'confirmed' &&
+                                    tripId.isNotEmpty)
                                   TextButton.icon(
                                     onPressed: () => _track(tripId),
                                     icon: const Icon(Icons.location_on),
@@ -605,6 +862,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _trips = [];
+  final Set<String> _bookingTrips = {};
 
   bool get _en => appLocale.value.languageCode == 'en';
 
@@ -689,6 +947,52 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     }
   }
 
+
+  Future<void> _bookSeat(Map<String, dynamic> trip, int seatNumber) async {
+    final tripId = (trip['id'] ?? trip['tripId'] ?? trip['documentId'] ?? '').toString().trim();
+    if (tripId.isEmpty || _bookingTrips.contains(tripId)) return;
+
+    setState(() => _bookingTrips.add(tripId));
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('يرجى تسجيل الدخول');
+
+      final token = await user.getIdToken(true);
+      if (token == null || token.isEmpty) throw Exception('تعذر الحصول على رمز الدخول');
+
+      final response = await http.post(
+        Uri.parse('$_apiUrl/bookings'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'tripId': tripId, 'seatNumber': seatNumber}),
+      ).timeout(const Duration(seconds: 30));
+
+      final data = jsonDecode(response.body);
+      if (response.statusCode < 200 || response.statusCode >= 300 ||
+          data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? data['error'] ?? 'تعذر إنشاء الحجز' : 'استجابة غير صالحة');
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_en
+          ? 'Booking request sent. Waiting for driver approval.'
+          : 'تم إرسال طلب الحجز. انتظر موافقة السائق.')),
+      );
+      await _loadTrips();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _bookingTrips.remove(tripId));
+    }
+  }
+
   String _field(Map<String, dynamic> trip, String key) {
     final value = trip[key]?.toString().trim();
     return value == null || value.isEmpty ? '-' : value;
@@ -726,6 +1030,8 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
     final vehicleType = _field(trip, 'vehicleType');
     final driverName = _field(trip, 'driverName');
     final departure = _field(trip, 'departureAt');
+    final tripId = (trip['id'] ?? trip['tripId'] ?? trip['documentId'] ?? '').toString().trim();
+
 
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
@@ -789,9 +1095,12 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: available.map((number) {
-                  return Chip(
+                  return ActionChip(
                     label: Text(number.toString()),
                     backgroundColor: const Color(0xFFE8F1EC),
+                    onPressed: tripId.isEmpty || _bookingTrips.contains(tripId)
+                        ? null
+                        : () => _bookSeat(trip, number),
                   );
                 }).toList(),
               ),
@@ -1638,6 +1947,9 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
       'https://workerv541js.dkhilislimhedi.workers.dev';
 
   List<Map<String, dynamic>> _trips = [];
+  List<Map<String, dynamic>> _driverBookings = [];
+  final Set<String> _bookingActions = {};
+
   bool _loading = true;
   bool _busy = false;
   String? _message;
@@ -1711,6 +2023,66 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
     return (trip['id'] ?? trip['tripId'] ?? trip['documentId'] ?? '').toString();
   }
 
+
+  String _bookingId(Map<String, dynamic> booking) {
+    return (booking['id'] ?? booking['bookingId'] ??
+        booking['documentId'] ?? '').toString();
+  }
+
+  Future<void> _loadDriverBookings() async {
+    try {
+      final data = await _request('GET', '/bookings/driver');
+      final raw = data['bookings'];
+      final bookings = raw is List
+          ? raw.whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e)).toList()
+          : <Map<String, dynamic>>[];
+
+      if (mounted) {
+        setState(() => _driverBookings = bookings);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
+  }
+
+  Future<void> _respondToBooking(
+      Map<String, dynamic> booking, String action) async {
+    final id = _bookingId(booking);
+    if (id.isEmpty || _bookingActions.contains(id)) return;
+
+    setState(() => _bookingActions.add(id));
+    try {
+      await _request(
+        'POST',
+        '/bookings/${Uri.encodeComponent(id)}/respond',
+        body: {'action': action},
+      );
+
+      if (mounted) {
+        setState(() {
+          _message = action == 'accept'
+              ? (_en ? 'Booking accepted.' : 'تم قبول طلب الحجز.')
+              : (_en ? 'Booking rejected.' : 'تم رفض طلب الحجز.');
+        });
+      }
+
+      await _loadDriverBookings();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _bookingActions.remove(id));
+    }
+  }
+
   Future<void> _loadTrips() async {
     if (mounted) {
       setState(() {
@@ -1721,6 +2093,8 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
 
     try {
       final data = await _request('GET', '/trips/mine');
+      await _loadDriverBookings();
+
       final raw = data['trips'];
       final trips = raw is List
           ? raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
@@ -1918,6 +2292,81 @@ class _DriverTripsScreenState extends State<DriverTripsScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
+
+                  if (_driverBookings.any((b) => b['status'] == 'pending')) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 12),
+                      child: Text(
+                        en ? 'Pending booking requests' : 'طلبات الحجز الجديدة',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    ..._driverBookings
+                        .where((b) => b['status'] == 'pending')
+                        .map((booking) {
+                      final bookingId = _bookingId(booking);
+                      final passenger = (booking['passengerName'] ??
+                          booking['passengerDisplayName'] ??
+                          booking['name'] ?? '').toString();
+                      final seat = booking['seatNumber']?.toString() ?? '';
+                      final origin = booking['origin']?.toString() ?? '';
+                      final destination =
+                          booking['destination']?.toString() ?? '';
+                      final busy = _bookingActions.contains(bookingId);
+
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                passenger.isEmpty
+                                    ? (en ? 'Passenger' : 'المسافر')
+                                    : passenger,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              if (seat.isNotEmpty)
+                                Text('${en ? 'Seat' : 'المقعد'}: $seat'),
+                              if (origin.isNotEmpty || destination.isNotEmpty)
+                                Text('$origin ← $destination'),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: FilledButton(
+                                      onPressed: busy || bookingId.isEmpty
+                                          ? null
+                                          : () => _respondToBooking(
+                                              booking, 'accept'),
+                                      child: Text(en ? 'Accept' : 'قبول'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: busy || bookingId.isEmpty
+                                          ? null
+                                          : () => _respondToBooking(
+                                              booking, 'reject'),
+                                      child: Text(en ? 'Reject' : 'رفض'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
                   if (_trips.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(24),
